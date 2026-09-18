@@ -1,6 +1,12 @@
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+// Loaded via the monorepo's unified server.js, whose cwd is apps/backend
+// rather than brands/gradient, so the cwd-relative default would load the
+// wrong .env. Resolve gradient's own .env explicitly instead.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 export default {
   APP_ENVIRONMENT: process.env.NODE_ENV || 'development',

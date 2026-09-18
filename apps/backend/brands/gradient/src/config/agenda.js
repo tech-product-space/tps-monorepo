@@ -2,7 +2,12 @@ import { Agenda } from "agenda";
 import { PostgresBackend } from "@agendajs/postgres-backend";
 import env from "./env.js";
 
-const connectionString = `postgresql://${env.postgres.username}:${env.postgres.password}@${env.postgres.host}:${env.postgres.port}/${env.postgres.database}?sslmode=no-verify`;
+// Local Postgres (homebrew/docker for local dev) doesn't speak SSL; the
+// managed RDS instance requires it.
+const sslQuery = ["localhost", "127.0.0.1"].includes(env.postgres.host)
+  ? ""
+  : "?sslmode=no-verify";
+const connectionString = `postgresql://${env.postgres.username}:${env.postgres.password}@${env.postgres.host}:${env.postgres.port}/${env.postgres.database}${sslQuery}`;
 
 // Create agenda with PostgreSQL backend
 const agenda = new Agenda({

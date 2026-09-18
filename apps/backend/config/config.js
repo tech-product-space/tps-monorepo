@@ -18,6 +18,11 @@ const POOL = {
   idle: parseInt(process.env.DB_POOL_IDLE_MS || "10000", 10),
 };
 
+// Local Postgres (homebrew/docker for local dev) doesn't speak SSL; the
+// managed RDS instance requires it. Skip dialectOptions entirely for
+// localhost so sequelize doesn't attempt an SSL handshake against it.
+const IS_LOCAL_DB = ["localhost", "127.0.0.1"].includes(process.env.DB_HOST);
+
 module.exports = {
   development: {
     username: process.env.DB_USER,
@@ -27,11 +32,13 @@ module.exports = {
     port: process.env.DB_PORT,
     dialect: "postgres",
     pool: POOL,
-    dialectOptions: {
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    },
+    dialectOptions: IS_LOCAL_DB
+      ? {}
+      : {
+          ssl: {
+            rejectUnauthorized: false,
+          },
+        },
     logging: CAN_DB_LOG ? console.log : false,
   },
   test: {
