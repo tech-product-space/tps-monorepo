@@ -1,9 +1,0 @@
-export type BulkAction =
-  | "APPROVE_ALL"
-  | "APPROVE_PROFESSIONALS"
-  | "APPROVE_STUDENTS"
-  | "DECLINE_ALL"
-  | "DECLINE_PROFESSIONALS"
-  | "DECLINE_STUDENTS";
-
-  
