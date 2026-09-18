@@ -1,0 +1,113 @@
+/*
+ * Styling for the prose editor's editable area.
+ *
+ * Separate from `TiptapEditor.css` (the blog editor) on purpose: that sheet
+ * sets a 400px minimum height, a fixed font and blog-scale headings, which is
+ * wrong for a short page section. Sharing it would mean every tweak to a blog
+ * post's typography silently reflowed the recordings page.
+ *
+ * Tailwind's preflight strips list markers and heading sizes, so a rich-text
+ * surface has to put them back explicitly — without this, a bulleted list looks
+ * identical to a paragraph and the editor appears broken.
+ */
+
+.rte-content {
+  outline: none;
+  min-height: 8rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.rte-content > * + * {
+  margin-top: 0.75em;
+}
+
+.rte-content p {
+  margin: 0;
+}
+
+.rte-content h2 {
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.2em;
+}
+
+.rte-content h3 {
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 1em;
+}
+
+.rte-content ul,
+.rte-content ol {
+  padding-left: 1.5rem;
+}
+
+.rte-content ul {
+  list-style: disc;
+}
+
+.rte-content ol {
+  list-style: decimal;
+}
+
+.rte-content li {
+  margin: 0.25em 0;
+}
+
+/* A list item's paragraph must stay inline with its marker. */
+.rte-content li > p {
+  margin: 0;
+}
+
+.rte-content ul ul {
+  list-style: circle;
+}
+
+.rte-content ol ol {
+  list-style: lower-alpha;
+}
+
+.rte-content blockquote {
+  border-left: 3px solid hsl(var(--border, 0 0% 85%));
+  padding-left: 1rem;
+  color: hsl(var(--muted-foreground, 0 0% 45%));
+  font-style: italic;
+}
+
+.rte-content a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.rte-content code {
+  background: hsl(var(--muted, 0 0% 96%));
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+
+.rte-content hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border, 0 0% 85%));
+  margin: 1.25em 0;
+}
+
+/*
+ * Placeholder. Tiptap leaves one empty paragraph in an empty document, so the
+ * hint hangs off that node rather than off the wrapper — a wrapper-level
+ * placeholder would keep showing behind real content.
+ */
+.rte-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: hsl(var(--muted-foreground, 0 0% 60%));
+}

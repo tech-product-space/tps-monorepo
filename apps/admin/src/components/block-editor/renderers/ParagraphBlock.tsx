@@ -1,0 +1,96 @@
+"use client";
+
+import React, { useRef, forwardRef, useCallback } from "react";
+import dynamic from "next/dynamic";
+import { Trash2, GripVertical } from "lucide-react";
+
+import "react-quill-new/dist/quill.snow.css";
+import { Button } from "@/components/ui/button";
+import { useDragHandle } from "./SortableBlock";
+import { BlockTypeSelect } from "./BlockTypeSelect";
+import { useQuillPasteSanitizer } from "@/hooks/useQuillPasteSanitizer";
+import { useQuillUncontrolled } from "../hooks/useQuillUncontrolled";
+import { createCode } from "../utils/blockFactory";
+
+const ReactQuill = dynamic(
+  async () => {
+    const mod = await import("react-quill-new");
+    return forwardRef<any, any>((props, ref) => (
+      <mod.default {...props} ref={ref} />
+    ));
+  },
+  { ssr: false },
+);
+
+const quillModules = {
+  toolbar: [
+    ["bold", "italic", "underline", "strike"],
+    [{ color: [] }, { background: [] }],
+    [{ list: "ordered" }, { list: "bullet" }],
+    [{ align: [] }],
+    ["link"],
+    ["clean"],
+  ],
+  clipboard: { matchVisual: false },
+};
+
+const quillFormats = [
+  "bold", "italic", "underline", "strike",
+  "color", "background", "list", "align", "link",
+];
+
+export function ParagraphBlock({ block, actions }: any) {
+  const { setActivatorNodeRef, listeners, attributes } = useDragHandle();
+
+  const { quillRef, handleChange } = useQuillUncontrolled(
+    block.data.html || "",
+    (value) => actions.update(block.id, { html: value })
+  );
+
+  useQuillPasteSanitizer(quillRef, {
+    onFencedCode: (fenced) => {
+      const b = createCode();
+      b.data.code = fenced.code;
+      b.data.language = fenced.language;
+      actions.replace?.(block.id, b);
+    },
+  });
+
+  return (
+    <div className="rounded-lg border bg-background shadow-sm">
+      <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span
+            ref={setActivatorNodeRef}
+            {...listeners}
+            {...attributes}
+            className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted"
+          >
+            <GripVertical className="h-4 w-4" />
+          </span>
+          <BlockTypeSelect block={block} actions={actions} />
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => actions.remove(block.id)}
+          className="h-7 w-7"
+        >
+          <Trash2 className="h-4 w-4 text-red-500" />
+        </Button>
+      </div>
+      <div className="p-3" onPointerDown={(e) => e.stopPropagation()}>
+        <ReactQuill
+          ref={quillRef}
+          theme="snow"
+          defaultValue={block.data.html || ""}
+          onChange={handleChange}
+          modules={quillModules}
+          formats={quillFormats}
+          placeholder="Write paragraph..."
+          className="bg-white large-quill"
+        />
+      </div>
+    </div>
+  );
+}

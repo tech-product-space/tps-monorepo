@@ -1,0 +1,17 @@
+{
+  "name": "tps-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unified backend (BRAND=tps|gradient|crm) + unified admin (one login, one permission system, three workspaces). See README.md and BACKEND-CONSOLIDATION-PLAN.md.",
+  "workspaces": [
+    "apps/backend",
+    "apps/admin"
+  ],
+  "scripts": {
+    "dev:backend:tps": "npm run dev:tps --workspace=apps/backend",
+    "dev:backend:gradient": "npm run dev:gradient --workspace=apps/backend",
+    "dev:backend:crm": "npm run dev:crm --workspace=apps/backend",
+    "dev:admin": "npm run dev --workspace=apps/admin",
+    "build:admin": "npm run build --workspace=apps/admin"
+  }
+}

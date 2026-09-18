@@ -1,0 +1,150 @@
+name: Deploy TPS Beta
+
+on:
+  pull_request:
+    branches: [beta]
+    types: [closed]
+
+jobs:
+  deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_BETA_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_BETA_HOST }} >> ~/.ssh/known_hosts
+
+      ####################################
+      # DEPLOY WITH BACKUP
+      ####################################
+      - name: Deploy to EC2 (rsync backup + deploy)
+        id: deploy_step
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_BETA_USER }}@${{ secrets.EC2_BETA_HOST }} << 'EOF'
+            set -e
+
+            cd /home/ubuntu
+
+            echo "==[1] Create backup directory if missing =="
+            mkdir -p backups
+
+            timestamp=$(date +"%Y-%m-%d-%H-%M")
+
+            echo "==[2] Creating rsync backup: backups/$timestamp =="
+            rsync -a --exclude="node_modules" tps-next-backend/ backups/$timestamp/
+
+            echo "==[3] Keep only last 2 backups =="
+            cd backups
+            ls -t | sed -e '1,2d' | xargs -d '\n' rm -rf || true
+            cd ..
+
+            echo "==[4] Switch to app directory =="
+            cd tps-next-backend
+
+            echo "==[5] Fetch latest beta branch code =="
+            git fetch origin beta
+            git reset --hard origin/beta
+
+            echo "==[6] Install production dependencies =="
+            npm install --production
+
+            echo "==[7] Restart PM2 =="
+            pm2 restart tps-backend
+
+            echo "==[8] Running health check =="
+            sleep 5
+
+            if ! curl -f https://beta-api.theproductspace.in/health; then
+              echo "HEALTH CHECK FAILED"
+              exit 1
+            else
+              echo "Health check passed!"
+            fi
+
+            echo "==[9] DEPLOYMENT SUCCESSFUL =="
+          EOF
+
+      ####################################
+      # AUTO ROLLBACK ON FAILURE
+      ####################################
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_BETA_USER }}@${{ secrets.EC2_BETA_HOST }} << 'EOF'
+            echo "!!! DEPLOY FAILED — STARTING ROLLBACK !!!"
+
+            cd /home/ubuntu
+
+            echo "Finding latest backup..."
+            latest_backup=$(ls -t backups | head -n 1)
+            echo "Restoring from backup: $latest_backup"
+
+            rm -rf tps-next-backend
+            cp -r backups/$latest_backup tps-next-backend
+
+            cd tps-next-backend
+
+            echo "Installing dependencies for restored version..."
+            npm install --production
+
+            echo "Restarting PM2 with previous stable version..."
+            pm2 restart all
+
+            echo "ROLLBACK COMPLETED!"
+          EOF
+
+      ####################################
+      # SUCCESS EMAIL
+      ####################################
+      - name: Send Success Email
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: "TPS Backend Deployment — SUCCESS"
+          to: ${{ secrets.EMAIL_LIST }}
+          from: "CI/CD Bot <${{ secrets.SMTP_USER }}>"
+          body: |
+            🎉 TPS Backend Beta Deployment Successful!
+
+            PR: ${{ github.event.pull_request.title }}
+            Commit: ${{ github.sha }}
+            Merged by: ${{ github.event.pull_request.merged_by.login }}
+            Deployed at: ${{ github.event.pull_request.merged_at }}
+
+            Backup kept: Last 2 versions.
+            Everything went smoothly.
+
+      ####################################
+      # FAILURE + ROLLBACK EMAIL
+      ####################################
+      - name: Send Failure Email
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: "TPS Backend Deployment — FAILED + ROLLBACK Applied"
+          to: ${{ secrets.EMAIL_LIST }}
+          from: "CI/CD Bot <${{ secrets.SMTP_USER }}>"
+          body: |
+            ❌ Deployment FAILED for TPS Backend Beta.
+            🔄 Auto-Rollback executed successfully.
+
+            PR: ${{ github.event.pull_request.title }}
+            Commit attempted: ${{ github.sha }}
+
+            Last stable version was restored.
+            Check GitHub Actions logs for more details.

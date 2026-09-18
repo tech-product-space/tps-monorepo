@@ -1,0 +1,176 @@
+/* ---------- Global Typography (EDITOR) ---------- */
+
+.custom-quill .ql-editor {
+  font-family: 'Work Sans', sans-serif;
+  font-size: 18px;
+  line-height: 1.55;
+  color: #111827;
+  padding: 20px;
+}
+
+/* Paragraph spacing */
+.custom-quill .ql-editor p {
+  margin: 0 0 0.75rem 0;
+}
+
+/* Remove spacing from inline spans */
+.custom-quill .ql-editor p span {
+  line-height: inherit !important;
+}
+
+/* ---------- Headings ---------- */
+
+.custom-quill .ql-editor h1,
+.custom-quill .ql-editor h2,
+.custom-quill .ql-editor h3 {
+  font-family: 'Work Sans', sans-serif;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  line-height: 1.25;
+}
+
+.custom-quill .ql-editor h1 { font-size: 40px; }
+.custom-quill .ql-editor h2 { font-size: 28px; }
+.custom-quill .ql-editor h3 { font-size: 22px; }
+
+/* Heading after heading spacing */
+.custom-quill .ql-editor h1 + h2,
+.custom-quill .ql-editor h2 + h3 {
+  margin-top: 1.2rem;
+}
+
+/* ---------- Lists (Bullet + Numbered) ---------- */
+
+/* Remove browser bullets & numbers to prevent double-list issue */
+.custom-quill .ql-editor ul,
+.custom-quill .ql-editor ol {
+  list-style-type: none !important;
+  padding-left: 1.8rem !important;
+  margin-left: 0 !important;
+}
+
+/* Spacing between list items */
+.custom-quill .ql-editor li {
+  margin: 0.4rem 0;
+  padding-left: 0.2rem;
+}
+
+/* Quill handles bullets internally — do NOT force browser bullets */
+.custom-quill .ql-editor li[data-list="bullet"] {
+  list-style-type: none !important;
+}
+
+/* Quill handles numbers internally — do NOT force browser numbers */
+.custom-quill .ql-editor li[data-list="ordered"] {
+  list-style-type: none !important;
+}
+
+/* ---------- Images ---------- */
+
+.custom-quill .ql-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+  display: block;
+}
+
+/* ---------- Blockquotes ---------- */
+
+.custom-quill .ql-editor blockquote {
+  border-left: 4px solid #e5e7eb;
+  background: #f9fafb;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 6px;
+  color: #4b5563;
+  font-style: italic;
+}
+
+/* ---------- Code Blocks ---------- */
+
+.custom-quill .ql-editor .ql-code-block-container {
+  background-color: #0f172a;
+  color: #e2e8f0;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  font-family: "Courier New", monospace;
+  font-size: 0.95rem;
+}
+
+.custom-quill .ql-editor .ql-code-block {
+  white-space: pre;
+}
+
+/* ---------- Tables ---------- */
+
+.custom-quill .ql-editor table {
+  display: block !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+
+.custom-quill .ql-editor table th,
+.custom-quill .ql-editor table td {
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.custom-quill .ql-editor table th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+custom-quill .ql-editor table tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* Scrollbar */
+.custom-quill .ql-editor table::-webkit-scrollbar {
+  height: 8px;
+}
+.custom-quill .ql-editor table::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+.custom-quill .ql-editor table::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border-radius: 4px;
+}
+.custom-quill .ql-editor table::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* ---------- Videos ---------- */
+
+.custom-quill .ql-editor iframe,
+.custom-quill .ql-editor video {
+  border-radius: 10px;
+  width: 100%;
+  margin: 1.5rem 0;
+}
+
+/* ---------- Mobile adjustments ---------- */
+
+@media (max-width: 600px) {
+  .custom-quill .ql-editor {
+    font-size: 17px;
+    line-height: 1.7;
+  }
+
+  .custom-quill .ql-editor h1 { font-size: 32px; }
+  .custom-quill .ql-editor h2 { font-size: 24px; }
+  .custom-quill .ql-editor h3 { font-size: 20px; }
+
+  .custom-quill .ql-editor table th,
+  .custom-quill .ql-editor table td {
+    font-size: 14px;
+    padding: 6px;
+  }
+}

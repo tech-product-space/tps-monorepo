@@ -1,0 +1,661 @@
+/* ─── Tiptap Content Base ────────────────────────────────────────────────── */
+.tiptap-content {
+  outline: none;
+  min-height: 400px;
+  font-family: Helvetica;
+  font-size: 15px;
+  line-height: 1.75;
+  color: #3E3E3E;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* ─── Headings ───────────────────────────────────────────────────────────── */
+.tiptap-content h1:first-child,
+.tiptap-content h2:first-child,
+.tiptap-content h3:first-child {
+  margin-top: 0;
+}
+
+.tiptap-content h1 {
+  font-size: 1.75em;
+  font-weight: 500;
+  color: #000000;
+  margin: 1.4em 0 0.5em;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.tiptap-content h2 {
+  font-size: 22px;
+  font-weight: 500;
+  color: #000000;
+  margin: 1.2em 0 0.4em;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.tiptap-content h3 {
+  font-size: 1.05em;
+  font-weight: 500;
+  color: #000000;
+  margin: 1em 0 0.3em;
+  line-height: 1.4;
+}
+
+/* ─── Paragraph ──────────────────────────────────────────────────────────── */
+.tiptap-content p {
+  margin: 0.55em 0;
+  color: #3E3E3E;
+  font-size: 16px;
+  line-height: 24.5px;
+}
+
+/* ─── Bold & Strong ──────────────────────────────────────────────────────── */
+.tiptap-content strong,
+.tiptap-content b,
+.tiptap-content .tiptap-bold {
+  font-weight: 700;
+  color: #000000;
+}
+
+/* ─── Lists ──────────────────────────────────────────────────────────────── */
+.tiptap-content ul,
+.tiptap-content ol {
+  padding-left: 1.4em;
+  margin: 0.5em 0;
+  color: #3E3E3E;
+}
+
+.tiptap-content ul {
+  list-style-type: none;
+  padding-left: 1em;
+}
+
+.tiptap-content ul li {
+  position: relative;
+  padding-left: 1.2em;
+}
+
+.tiptap-content ul li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.7em;
+  width: 4px;
+  height: 4px;
+  background-color: #3E3E3E;
+  border-radius: 50%;
+}
+
+.tiptap-content ol {
+  list-style-type: decimal;
+}
+
+.tiptap-content li {
+  margin: 0.2em 0;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* ─── Blockquote ─────────────────────────────────────────────────────────── */
+.tiptap-content blockquote {
+  border-left: 3px solid #3b82f6;
+  padding-left: 1em;
+  color: #64748b;
+  margin: 1em 0;
+  font-style: italic;
+}
+
+/* ─── Horizontal Rule ────────────────────────────────────────────────────── */
+.tiptap-content hr {
+  border: none;
+  border-top: 2px solid #e2e8f0;
+  margin: 1.75em 0;
+  border-radius: 2px;
+}
+
+/* ─── Inline Code ────────────────────────────────────────────────────────── */
+.tiptap-content p code,
+.tiptap-content li code {
+  background: #3f3f3f;
+  color: #fff;
+  padding: 0.15em 0.45em;
+  border-radius: 6px;
+  font-family: "Fira Code", monospace;
+  font-size: 0.875em;
+}
+
+/* ─── Code inside table cells — Notion-style pill ───────────────────────── */
+.tiptap-content td code,
+.tiptap-content th code {
+  background: #efefef;
+  color: #c7254e;
+  padding: 0.15em 0.45em;
+  border-radius: 4px;
+  font-family: "Fira Code", monospace;
+  font-size: 0.82em;
+  display: inline;
+  white-space: nowrap;
+}
+
+/* ─── Simple Code Block (p > code) ──────────────────────────────────────── */
+.tiptap-content p.code-block {
+  background: #3f3f3f;
+  padding: 14px 24px;
+  border-radius: 10px;
+  margin: 10px 0;
+}
+
+.tiptap-content p.code-block code {
+  background: none;
+  color: #fff;
+  padding: 0;
+  display: block;
+  width: 100%;
+}
+
+/* ─── Override: reset code block styles inside table cells ──────────────── */
+.tiptap-content td p:has(> code:only-child),
+.tiptap-content th p:has(> code:only-child) {
+  background: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+.tiptap-content td p:has(> code:only-child) code,
+.tiptap-content th p:has(> code:only-child) code {
+  background: #efefef !important;
+  color: #c7254e !important;
+  padding: 0.15em 0.45em !important;
+  border-radius: 4px !important;
+  font-family: "Fira Code", monospace;
+  font-size: 0.82em;
+  display: inline !important;
+  width: auto !important;
+  white-space: nowrap !important;
+}
+
+/* ─── Tabbed Code Block ──────────────────────────────────────────────────── */
+/*
+  Wrap your <pre><code> in a .tiptap-code-block div like this:
+
+  <div class="tiptap-code-block">
+    <div class="tiptap-code-tabs">
+      <button class="tiptap-code-tab active">Python</button>
+      <button class="tiptap-code-tab">JavaScript</button>
+    </div>
+    <div class="tiptap-code-body">
+      <pre><code>...</code></pre>
+    </div>
+  </div>
+*/
+
+.tiptap-content .tiptap-code-block {
+  margin: 1.2em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+/* Tab bar */
+.tiptap-content .tiptap-code-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0 0 0 0;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tiptap-content .tiptap-code-tab {
+  padding: 7px 18px;
+  font-size: 13px;
+  font-family: "Fira Code", "Menlo", monospace;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  outline: none;
+  border-radius: 0;
+  margin-bottom: -1px;
+}
+
+.tiptap-content .tiptap-code-tab:hover {
+  color: #1e293b;
+  background: #e9eef5;
+}
+
+.tiptap-content .tiptap-code-tab.active {
+  color: #1e293b;
+  background: #ffffff;
+  border-bottom: 2px solid #22c55e;
+  font-weight: 600;
+}
+
+/* Code body */
+.tiptap-content .tiptap-code-body {
+  background: #ffffff;
+  border-left: 3px solid #22c55e;
+  padding: 0;
+  position: relative;
+}
+
+/* Overlay pre — sits behind the transparent textarea */
+.tiptap-content .tiptap-code-body pre {
+  background: transparent;
+  margin: 0;
+  border-radius: 0;
+  font-family: "Fira Code", "Menlo", "Consolas", monospace;
+  font-size: 13.5px;
+  line-height: 1.75;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
+  scrollbar-width: none;
+}
+
+.tiptap-content .tiptap-code-body pre::-webkit-scrollbar {
+  display: none;
+}
+
+.tiptap-content .tiptap-code-body pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Thin scrollbar on textarea */
+.tiptap-content .tiptap-code-body textarea {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.tiptap-content .tiptap-code-body textarea::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.tiptap-content .tiptap-code-body textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tiptap-content .tiptap-code-body textarea::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+/* ─── Standard Code Block (pre > code) ──────────────────────────────────── */
+.tiptap-content pre {
+  background: #3f3f3f;
+  color: #fff;
+  padding: 20px 24px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 1.2em 0;
+  font-family: "Fira Code", monospace;
+  font-size: 13.5px;
+  line-height: 1.75;
+  scrollbar-width: thin;
+  scrollbar-color: #888 #555;
+}
+
+.tiptap-content pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.tiptap-content pre::-webkit-scrollbar {
+  height: 4px;
+}
+.tiptap-content pre::-webkit-scrollbar-track {
+  background: #555;
+  border-radius: 3px;
+}
+.tiptap-content pre::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 999px;
+}
+
+/* ─── Links ──────────────────────────────────────────────────────────────── */
+.tiptap-content a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tiptap-content a:hover {
+  color: #1d4ed8;
+}
+
+/* ─── Highlight ──────────────────────────────────────────────────────────── */
+.tiptap-content mark {
+  background: #fef08a;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.05em 0.1em;
+}
+
+/* ─── Image Styles ───────────────────────────────────────────────────────── */
+.tiptap-content .tiptap-image,
+.tiptap-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+  margin: 16px auto;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.15s;
+}
+
+.tiptap-content .tiptap-image:hover,
+.tiptap-content img:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.tiptap-content img.ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* ─── Image Node View ────────────────────────────────────────────────────── */
+.tiptap-image-wrapper {
+  display: block;
+  margin: 0.75rem 0;
+  text-align: center;
+}
+
+.tiptap-image-selected {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* ─── YouTube Embed Styles ───────────────────────────────────────────────── */
+.tiptap-content .tiptap-youtube,
+.tiptap-content div[data-youtube-video] {
+  margin: 20px auto;
+  border-radius: 10px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 720px;
+  aspect-ratio: 16 / 9;
+}
+
+.tiptap-content .tiptap-youtube iframe,
+.tiptap-content div[data-youtube-video] iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.tiptap-content iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+  border-radius: 10px;
+}
+
+/* ─── Table Styles ───────────────────────────────────────────────────────── */
+.tiptap-content .tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1.25em 0;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.tiptap-content .tableWrapper::-webkit-scrollbar {
+  height: 3px;
+}
+.tiptap-content .tableWrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tiptap-content .tableWrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+.tiptap-content .tableWrapper::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.tiptap-content table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 14px;
+}
+
+.tiptap-content th,
+.tiptap-content td {
+  border: 1px solid #e9eef5;
+  padding: 9px 14px;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: middle !important
+}
+
+.tiptap-content th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+/* Zebra striping */
+.tiptap-content tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.tiptap-content tbody tr:hover td {
+  background: #eff6ff;
+  transition: background 0.1s ease;
+}
+
+/* First column emphasis */
+.tiptap-content td:first-child {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+/* Selected cell */
+.tiptap-content .selectedCell::after {
+  background: rgba(59, 130, 246, 0.1);
+  content: "";
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+/* Column resize handle */
+.tiptap-content .column-resize-handle {
+  background-color: #3b82f6;
+  bottom: -2px;
+  position: absolute;
+  right: -2px;
+  pointer-events: none;
+  top: 0;
+  width: 3px;
+}
+
+/* ─── Placeholder ────────────────────────────────────────────────────────── */
+.tiptap-content p.is-editor-empty:first-child::before {
+  color: #94a3b8;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ─── Focus ring ─────────────────────────────────────────────────────────── */
+.ProseMirror:focus {
+  outline: none;
+}
+/* ── Single-language code block ─────────────────────────────────────────────
+   The colours themselves come from `.prism-code-dark` in globals.css, which the
+   node view sets alongside this class — one theme shared with the block
+   editor's own code preview, so the same snippet looks the same either side of
+   a conversion. */
+.tiptap-codeblock {
+  position: relative;
+  margin: 1.25rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d1117;
+  border: 1px solid #21262d;
+}
+
+.tiptap-codeblock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+  user-select: none;
+}
+
+.tiptap-codeblock-bar select {
+  background: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  font-size: 11px;
+  padding: 2px 6px;
+  outline: none;
+  cursor: pointer;
+}
+
+.tiptap-codeblock-bar select:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.tiptap-codeblock-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  color: #8b949e;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.tiptap-codeblock-bar button:hover {
+  color: #c9d1d9;
+  background: #21262d;
+}
+
+.tiptap-codeblock pre {
+  margin: 0;
+  padding: 14px 16px;
+  background: transparent;
+  overflow-x: auto;
+}
+
+.tiptap-codeblock pre code {
+  background: transparent;
+  padding: 0;
+  font-family: "Fira Code", Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* ── Tiptap content on the dark lesson surface ──────────────────────────────
+   `.tiptap-content` is styled for a light page — it is the blog's body too —
+   so on the lesson player, which is dark, its own colours win over the
+   container's and the text comes out near-black on near-black. These re-state
+   the same rules in the palette `.module-lesson-preview` already uses for
+   block-rendered lessons, so a v1 and a v2 lesson look the same to a learner.
+
+   Scoped to `.module-lesson-preview`, so blogs are untouched. */
+.module-lesson-preview .tiptap-content {
+  color: #cbd5e1;
+  min-height: 0;
+}
+
+.module-lesson-preview .tiptap-content h1 {
+  color: #ffffff;
+}
+
+.module-lesson-preview .tiptap-content h2 {
+  color: #f9fafb;
+}
+
+.module-lesson-preview .tiptap-content h3 {
+  color: #e5e7eb;
+}
+
+.module-lesson-preview .tiptap-content p,
+.module-lesson-preview .tiptap-content li,
+.module-lesson-preview .tiptap-content td,
+.module-lesson-preview .tiptap-content th {
+  color: #cbd5e1;
+}
+
+.module-lesson-preview .tiptap-content strong,
+.module-lesson-preview .tiptap-content b,
+.module-lesson-preview .tiptap-content .tiptap-bold {
+  color: #ffffff;
+}
+
+.module-lesson-preview .tiptap-content a {
+  color: #60a5fa;
+}
+
+.module-lesson-preview .tiptap-content ul li::before {
+  background-color: #cbd5e1;
+  color: #cbd5e1;
+}
+
+.module-lesson-preview .tiptap-content blockquote {
+  border-left-color: #474646;
+  color: #e5e7eb;
+}
+
+.module-lesson-preview .tiptap-content hr {
+  border-color: #474646;
+}
+
+.module-lesson-preview .tiptap-content table td,
+.module-lesson-preview .tiptap-content table th {
+  border-color: #474646;
+}
+
+.module-lesson-preview .tiptap-content table th {
+  background: #202020;
+  color: #ffffff;
+}
+
+/* Inline code — the fenced block brings its own dark theme already. */
+.module-lesson-preview .tiptap-content code {
+  background: #202020;
+  color: #e5e7eb;
+}

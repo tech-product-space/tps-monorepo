@@ -1,0 +1,24 @@
+Column,Allowed values
+currency,INR / USD / EUR / GBP / AED
+status,Paid / Pending / Reimbursed
+payment_method,Cash / Card / Bank Transfer / UPI / Other
+payment_account,HDFC Current A/C / ICICI Corporate Card / Petty Cash / Sakshi's Upi — or any new name (it gets created)
+team,HR / Sales / Program
+,
+CATEGORY,SUBCATEGORY
+Office & Rent,Rent
+Office & Rent,Utility
+Office & Rent,Maintanance
+Software & Subscriptions,Saas tools
+Software & Subscriptions,Cloud Hosting
+Software & Subscriptions,Domain
+Salaries & Contractors,Full-time
+Salaries & Contractors,Freelance
+Salaries & Contractors,Intern
+Marketing,Ads
+Marketing,Content
+Travel,Flights
+Travel,Hotels
+Sales,Sim
+Sales,Recharge
+Others,(none)

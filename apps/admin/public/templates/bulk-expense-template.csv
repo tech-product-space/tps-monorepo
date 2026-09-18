@@ -1,0 +1,9 @@
+title*,amount*,currency,expense_date*,category*,subcategory,status,payment_method,payment_account,vendor,team,notes
+Office Rent - July 2026,85000.00,INR,2026-07-01,Office & Rent,Rent,Paid,Bank Transfer,HDFC Current A/C,Prestige Estates,Program,Monthly rent for the Bangalore office
+Electricity Bill,7340.20,INR,2026-07-04,Office & Rent,Utility,Paid,Other,HDFC Current A/C,BESCOM,Program,
+AWS Cloud Bill,412.75,USD,2026-07-05,Software & Subscriptions,Cloud Hosting,Paid,Card,ICICI Corporate Card,Amazon Web Services,Program,"Invoiced in USD, not converted"
+Freelance Designer - June,45000,INR,2026-07-08,Salaries & Contractors,Freelance,Pending,Bank Transfer,HDFC Current A/C,Ananya Design Studio,HR,Invoice awaited
+Meta Ads Top-up,150000,INR,2026-07-10,Marketing,Ads,Paid,Bank Transfer,HDFC Current A/C,Meta Platforms,Sales,
+Cab Reimbursement,860,INR,2026-07-11,Travel,Flights,Reimbursed,UPI,Petty Cash,Uber,Sales,Client visit
+Printer Cartridges,2199,INR,2026-07-12,Others,,Paid,Cash,Petty Cash,Staples,,Row with no subcategory and no team
+Team Sim Recharge,999,INR,2026-07-15,Sales,Recharge,Paid,UPI,Petty Cash,Airtel,Sales,
