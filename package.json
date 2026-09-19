@@ -1,0 +1,23 @@
+{
+  "name": "product-space-backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "One backend for The Product Space (tps), The Gradient (gradient) and the sales CRM (crm): one process, one Postgres database, one schema per brand.",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "node apps/api/server.js",
+    "dev": "node --watch apps/api/server.js",
+    "worker": "node apps/worker/worker.js",
+    "worker:dev": "node --watch apps/worker/worker.js",
+    "db:schemas": "node apps/api/scripts/create-schemas.js",
+    "migrate:tps": "npm run migrate --workspace @ps/tps",
+    "migrate:gradient": "npm run migrate --workspace @ps/gradient",
+    "migrate:crm": "npm run migrate --workspace @ps/crm"
+  }
+}

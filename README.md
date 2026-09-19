@@ -1,28 +1,56 @@
-# tps-monorepo
+# Product Space backend monorepo
 
-Replaces three backends (`gradient-backend`, `tps-next-backend`, `tps-crm-backend`) and three admin frontends (`gradient-admin`, `product-space-admin`, `tps-crm`) with:
+One backend for three brands — **tps** (The Product Space), **gradient** (The Gradient) and **crm** (the sales CRM) — running in one process against **one Postgres database**, with **one schema per brand**.
 
-- **`apps/backend`** — one codebase, three bootable targets (`BRAND=tps|gradient|crm`), each with its own database. See [`apps/backend/README.md`](apps/backend/README.md).
-- **`apps/admin`** — one Next.js app, one login, one permission system, an internal workspace switcher (Gradient / TPS / CRM). See [`apps/admin/src/lib/workspace.ts`](apps/admin/src/lib/workspace.ts).
+```
+apps/api/        gateway: mounts the three brand apps
+apps/worker/     crons, Agenda jobs and BullMQ workers for all brands
+packages/tps/        was tps-next-backend      (CommonJS)
+packages/gradient/   was gradient-backend      (ESM)
+packages/crm/        was tps-crm-backend       (CommonJS)
+packages/env/        brand-scoped process.env + Postgres schema helpers
+```
 
-Full design rationale, the audit this was built from, and the phased migration plan: [`BACKEND-CONSOLIDATION-PLAN.md`](../BACKEND-CONSOLIDATION-PLAN.md) (one level up, alongside the original six source projects).
+## How the brands stay separate
 
-Public sites (`gradient-next-ui`, `product-space-next-ui`) are **not** part of this monorepo — they're customer-facing, brand-specific, and keep talking to whichever backend target serves their brand (`api.gradientlearnings.org` → `BRAND=gradient`, `api.theproductspace.in` → `BRAND=tps`, `crm-api.theproductspace.in` → `BRAND=crm`, same as today).
+| Concern | How |
+|---|---|
+| **Tables** | One database, schemas `tps`, `gradient`, `crm`. Every connection a brand opens sets `search_path` to its schema (`packages/env/db.js`), so models, raw SQL, FKs, enum types and all existing migrations work **unchanged**. Each schema has its own `SequelizeMeta`. |
+| **Routes** | `/tps/*`, `/gradient/*`, `/crm/*` (CRM keeps its inner `/api/v1`, e.g. `/crm/api/v1/leads`). Each brand is an Express **sub-app**, so its middleware stack (CRM raw-body webhooks, TPS open CORS, Gradient activity logger) never leaks into another. |
+| **Legacy URLs** | The same sub-apps are also served at the root of their old hostnames (`*_LEGACY_HOSTS`), so Cal.com / Razorpay / Cashfree / SES / OAuth callbacks, links in already-sent emails and the frontends keep working while they migrate. |
+| **Env** | One `.env`. Brand values are `TPS_*` / `GRADIENT_*` / `CRM_*`; the code reads `<BRAND>_X` first and falls back to plain `X`. Every `process.env` in the brand packages was replaced with `psEnv` (`@ps/env/<brand>`). |
+| **Auth** | Unchanged and separate per brand. The gateway **refuses to boot** if two brands share a `JWT_SECRET` or a `PG_SCHEMA`. |
 
-## What's real here vs. what's follow-up
+`BRANDS=tps,gradient,crm` chooses which brands run in a process, so the same build can be split across instances later.
 
-This was built by copying the actual source of all six original projects, rewriting their imports/auth/routing to the unified shape, and verifying with a real `npm install` + `tsc --noEmit` pass on the admin app (0 install errors, 20 pre-existing type errors — all confined to one documented dependency conflict, see below). It is not a scaffold of empty folders.
+## Run
 
-**Done:**
-- Backend `BRAND` dispatcher, cascading three-way install, each target's own DB connection untouched.
-- Shared admin identity (`users` + `admin_workspace_grants` in `crm_db`) — one login, JWT carries per-workspace grants.
-- TPS and Gradient backends both verify CRM-issued JWTs directly and JIT-provision their local identity row (`company` / `AdminUser`) so existing foreign keys don't need a data migration.
-- Cross-database grant backfill script (`apps/backend/scripts/backfill-workspace-grants.js`) — **must be run before cutover**, see `apps/backend/README.md`.
-- `unified-admin`: TPS's `admin`/`superadmin` route trees collapsed into one role-gated tree; Gradient's ~330 files ported in with every import rewritten to a `@/gradient/*` namespace; a workspace switcher wired into both; middleware gates all three route trees by actual grant, not just "logged in."
-- CRM workspace: one real page ported end-to-end (Dashboard, with all its charts/KPI widgets) proving the pattern — calls the CRM backend through the same unified auth as everything else.
+```bash
+cp .env.example .env            # fill in
+npm install
+npm run db:schemas              # CREATE SCHEMA IF NOT EXISTS tps/gradient/crm
+npm run migrate:crm && npm run migrate:gradient && npm run migrate:tps
+npm start                       # gateway on $PORT
+npm run worker                  # exactly one of these per deployment
+```
 
-**Follow-up work, not done here:**
-- **CRM workspace, the rest of it** — tps-crm is a Vite + react-router SPA (264 files); Dashboard is ported, the other ~9 pages (Boards, Leads, Enrollments, Payments, Invoices, Student Profiles, Meetings, Reports, Settings) are still Vite-only. This was always meant to be the last, biggest phase (see the consolidation plan §7.4) — budget it as its own piece of work, not a quick follow-up.
-- **Tiptap v2 vs v3**: `product-space-admin` runs Tiptap v2, `gradient-admin` runs Tiptap v3 with v3-only extensions (`@tiptap/html`, `@tiptap/extensions`, `@tiptap/extension-table-of-contents`). Kept at v2 (the base app's version) rather than risk a silent break elsewhere — Gradient's `TiptapEditor`, `RichTextEditor`, and docx-import components (20 type errors, all in these 3 files) need a real compatibility pass before they'll compile.
-- **Google OAuth admin login** isn't unified — it's still TPS-only (`services/auth/authService.ts`'s `loginWithGoogle`/`signup*`). The CRM backend has no Google-login or invite-flow route yet.
-- **Page-level role enforcement** beyond nav visibility: sidebar items are hidden by role (Superadmin-only sections, etc.), but direct navigation to a URL isn't blocked per-page yet — only per-workspace (middleware.ts).
+Each package still runs standalone from its old `.env` (no `PG_SCHEMA`, no `DATABASE_URL`) — `npm start --workspace @ps/crm` — which is the rollback path.
+
+Background work must run **once per deployment**: keep `RUN_WORKERS_IN_API=false` and run `apps/worker`, or (tiny box) set it `true` and don't run a separate worker.
+
+## Changes made to the original code
+
+Everything else is the original code, moved in as-is.
+
+- `tps/app.js`, `crm/src/app.js`, `gradient/src/boot.js` — the app / startup split out of `server.js` / `index.js` so it can be imported without listening or starting crons. The old entrypoints still work.
+- `psEnv` replaces `process.env` everywhere (codemod; 147 files).
+- DB config (`tps/config/config.js`, `crm/src/config/database.js`, `gradient/src/database/postgres/{sequelize,config}.js`, `gradient/src/config/agenda.js`) accepts a shared `DATABASE_URL` + `PG_SCHEMA`. TPS's second Sequelize instance (`config/db.js`) now re-exports the one from `models/`.
+- `crm/src/middlewares/readOnly.middleware.js` and `gradient/src/middlewares/activityLog.middleware.js` derive paths from `originalUrl`/`baseUrl`; both now strip the mount prefix so they behave identically under `/crm`, `/gradient` and on a legacy host.
+
+## Known limits
+
+- `search_path` is set with Postgres's `options` startup parameter: fine against RDS directly, **not** through PgBouncer in transaction mode.
+- Three Sequelize pools share one RDS `max_connections` — size `DB_POOL_MAX` per brand.
+- Dependency versions differ between the brands (agenda 5 vs 6, bullmq 5 vs 6, multer 1 vs 2, msal 3 vs 5); npm nests the conflicts. Deduping is a later cleanup.
+- CRM's maintenance scripts that read the TPS database (`TPS_DATABASE_URL`) still use a URL; they can become plain cross-schema reads later.
+- One process = one blast radius. Use PM2/ECS restarts + memory limits, and split by `BRANDS` if a brand needs isolating.

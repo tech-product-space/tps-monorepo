@@ -1,0 +1,14 @@
+{
+  "name": "@ps/env",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Brand-scoped view of process.env: TPS_X wins over X for the tps brand, and so on.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./tps": "./tps.js",
+    "./gradient": "./gradient.js",
+    "./crm": "./crm.js",
+    "./db": "./db.js"
+  }
+}

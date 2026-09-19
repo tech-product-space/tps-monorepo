@@ -1,0 +1,14 @@
+{
+  "name": "@ps/worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Background work for all brands: crons, Agenda jobs and BullMQ workflow workers.",
+  "main": "worker.js",
+  "dependencies": {
+    "@ps/env": "*",
+    "@ps/tps": "*",
+    "@ps/gradient": "*",
+    "@ps/crm": "*",
+    "dotenv": "^17.3.1"
+  }
+}

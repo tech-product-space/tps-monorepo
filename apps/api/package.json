@@ -1,0 +1,17 @@
+{
+  "name": "@ps/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gateway: mounts the tps, gradient and crm apps under /tps, /gradient, /crm (and on their legacy hostnames).",
+  "main": "server.js",
+  "dependencies": {
+    "@ps/env": "*",
+    "@ps/tps": "*",
+    "@ps/gradient": "*",
+    "@ps/crm": "*",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "pg": "^8.16.3",
+    "swagger-ui-express": "^5.0.1"
+  }
+}

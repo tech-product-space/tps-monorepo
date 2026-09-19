@@ -1,0 +1,11 @@
+FROM node:24-alpine
+
+# Create non-root user
+RUN adduser -D sandbox && \
+    mkdir -p /home/sandbox/work && \
+    chown -R sandbox:sandbox /home/sandbox
+
+USER sandbox
+WORKDIR /home/sandbox/work
+
+CMD ["node", "-"]
