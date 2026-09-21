@@ -38,7 +38,7 @@ const jwt = require("jsonwebtoken");
  * tokens alone, without touching sessions or any other signed link.
  */
 
-const SECRET_KEY = psEnv.JWT_SECRET || "your_secret_key";
+const SECRET_KEY = require("./jwtSecret");
 
 /** In the URL, so short. Long enough to survive a slow save-then-open. */
 const LAUNCH_TTL = psEnv.PREVIEW_LAUNCH_TTL || "15m";

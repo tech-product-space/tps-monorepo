@@ -3,6 +3,11 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// No fallback: a default secret in the code would let anyone who has read it mint valid tokens.
+if (!psEnv.JWT_SECRET) {
+  throw new Error("JWT_SECRET is not set (GRADIENT_JWT_SECRET in the monorepo .env)");
+}
+
 export default {
   APP_ENVIRONMENT: psEnv.NODE_ENV || 'development',
   PORT: psEnv.PORT,
@@ -17,7 +22,7 @@ export default {
 
   jwt: {
     auth: {
-      secret: psEnv.JWT_SECRET || "gradient-supersecret"
+      secret: psEnv.JWT_SECRET
     }
   },
 

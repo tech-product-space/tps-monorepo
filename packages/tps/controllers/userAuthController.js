@@ -5,7 +5,7 @@ const { users } = require("../models");
 const resetPasswordEmailTemplate = require("../utils/templates/resetPasswordEmailTemplate");
 const { sendGraphEmail } = require("../utils/email/sendGraphEmail");
 
-const SECRET_KEY = psEnv.JWT_SECRET || "your_secret_key";
+const SECRET_KEY = require("../utils/jwtSecret");
 
 const userSignup = async (req, res) => {
   try {

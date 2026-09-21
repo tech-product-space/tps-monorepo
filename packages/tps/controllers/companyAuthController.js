@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require("uuid");
 const { company } = require("../models");
 const { sendEmail, generateEmailHtml } = require("../utils/sendEmail");
 
-const SECRET_KEY = psEnv.JWT_SECRET || "your_secret_key";
+const SECRET_KEY = require("../utils/jwtSecret");
 
 // Access tokens are short-lived; the admin panel silently refreshes them with
 // the long-lived refresh token (see POST /company/refresh) so an active session

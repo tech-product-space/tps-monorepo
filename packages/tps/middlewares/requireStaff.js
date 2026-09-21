@@ -1,8 +1,7 @@
-const psEnv = require("@ps/env/tps");
 const jwt = require("jsonwebtoken");
 const db = require("../models");
 
-const SECRET_KEY = psEnv.JWT_SECRET || "your_secret_key";
+const SECRET_KEY = require("../utils/jwtSecret");
 const { company } = db;
 
 // Authenticates an admin/superadmin staff member. Their access-token payload is

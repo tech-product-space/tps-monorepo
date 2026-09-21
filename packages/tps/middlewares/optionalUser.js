@@ -1,8 +1,7 @@
-const psEnv = require("@ps/env/tps");
 const jwt = require("jsonwebtoken");
 const db = require("../models");
 
-const SECRET_KEY = psEnv.JWT_SECRET || "your_secret_key";
+const SECRET_KEY = require("../utils/jwtSecret");
 const { users } = db;
 
 // Attaches req.appUser when the caller happens to be a signed-in public-site

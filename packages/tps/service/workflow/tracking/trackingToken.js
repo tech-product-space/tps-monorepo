@@ -7,7 +7,9 @@ const crypto = require("crypto");
 // the open/click/unsub endpoints don't need a token table.
 
 function secret() {
-  return psEnv.TRACKING_SECRET || psEnv.JWT_SECRET || "dev-tracking-secret";
+  const s = psEnv.TRACKING_SECRET || psEnv.JWT_SECRET;
+  if (!s) throw new Error("TRACKING_SECRET (or JWT_SECRET) is not set");
+  return s;
 }
 
 function b64uEncode(buf) {
