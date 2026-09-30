@@ -1,56 +1,49 @@
-# Product Space backend monorepo
+# ps-v3
 
-One backend for three brands — **tps** (The Product Space), **gradient** (The Gradient) and **crm** (the sales CRM) — running in one process against **one Postgres database**, with **one schema per brand**.
+Consolidated project for the 3 backend services, pulled fresh from `main` on 2026-09-30, targeting a single EC2 (`t4g.medium`) with a local PostgreSQL instance — no RDS, one database, one schema per service.
+
+## Layout
 
 ```
-apps/api/        gateway: mounts the three brand apps
-apps/worker/     crons, Agenda jobs and BullMQ workers for all brands
-packages/tps/        was tps-next-backend      (CommonJS)
-packages/gradient/   was gradient-backend      (ESM)
-packages/crm/        was tps-crm-backend       (CommonJS)
-packages/env/        brand-scoped process.env + Postgres schema helpers
+ps-v3/
+├── tps-backend/       ← tech-product-space/tps-next-backend, main @ c04b9d5
+├── crm-backend/        ← tech-product-space/tps-crm-backend,  main @ a82c4c1 (already up to date)
+├── gradient-backend/    ← tech-product-space/gradient-backend, main @ 4253fee
+└── db/init.sql          ← creates `productspace` DB, 3 schemas, ps_app role — run once on the server
 ```
 
-## How the brands stay separate
+`node_modules` was stripped from all 3 copies — reinstall fresh on the EC2 (target is arm64/t4g, your local `node_modules` wouldn't be portable anyway).
 
-| Concern | How |
-|---|---|
-| **Tables** | One database, schemas `tps`, `gradient`, `crm`. Every connection a brand opens sets `search_path` to its schema (`packages/env/db.js`), so models, raw SQL, FKs, enum types and all existing migrations work **unchanged**. Each schema has its own `SequelizeMeta`. |
-| **Routes** | `/tps/*`, `/gradient/*`, `/crm/*` (CRM keeps its inner `/api/v1`, e.g. `/crm/api/v1/leads`). Each brand is an Express **sub-app**, so its middleware stack (CRM raw-body webhooks, TPS open CORS, Gradient activity logger) never leaks into another. |
-| **Legacy URLs** | The same sub-apps are also served at the root of their old hostnames (`*_LEGACY_HOSTS`), so Cal.com / Razorpay / Cashfree / SES / OAuth callbacks, links in already-sent emails and the frontends keep working while they migrate. |
-| **Env** | One `.env`. Brand values are `TPS_*` / `GRADIENT_*` / `CRM_*`; the code reads `<BRAND>_X` first and falls back to plain `X`. Every `process.env` in the brand packages was replaced with `psEnv` (`@ps/env/<brand>`). |
-| **Auth** | Unchanged and separate per brand. The gateway **refuses to boot** if two brands share a `JWT_SECRET` or a `PG_SCHEMA`. |
+## Database: 1 instance, 1 database, 3 schemas
 
-`BRANDS=tps,gradient,crm` chooses which brands run in a process, so the same build can be split across instances later.
+Per your decision: each service keeps its own existing tables/auth as-is, just namespaced into its own schema (`tps`, `crm`, `gradient`) instead of a separate database. `db/init.sql` creates the DB, schemas, and a single `ps_app` role with grants on all three. The unified-login/shared-auth schema is **explicitly deferred** — not part of this pass.
 
-## Run
+## What each service still needs before this works — not yet done
 
-```bash
-cp .env.example .env            # fill in
-npm install
-npm run db:schemas              # CREATE SCHEMA IF NOT EXISTS tps/gradient/crm
-npm run migrate:crm && npm run migrate:gradient && npm run migrate:tps
-npm start                       # gateway on $PORT
-npm run worker                  # exactly one of these per deployment
-```
+None of the 3 backends currently set a schema on their DB connection (all default to Postgres's `public` schema), and all 3 require SSL on the DB connection (correct for RDS, wrong for a local Postgres on `localhost`). Concretely:
 
-Each package still runs standalone from its old `.env` (no `PG_SCHEMA`, no `DATABASE_URL`) — `npm start --workspace @ps/crm` — which is the rollback path.
+| Service | File(s) | Change needed |
+|---|---|---|
+| `tps-backend` | `config/db.js` | Add `define: { schema: 'tps' }` to the Sequelize options; make `dialectOptions.ssl` conditional (off for local) |
+| `crm-backend` | `src/config/database.js` | Add `schema: 'crm'` per environment block; same SSL toggle |
+| `gradient-backend` | `src/database/postgres/sequelize.js`, `src/database/postgres/config.js` | Add `define: { schema: 'gradient' }` in both (CLI config controls where migrations land); same SSL toggle |
 
-Background work must run **once per deployment**: keep `RUN_WORKERS_IN_API=false` and run `apps/worker`, or (tiny box) set it `true` and don't run a separate worker.
+I stopped short of making these edits in this pass — they touch each service's core DB connection layer and I wanted to flag them rather than push a change to 3 codebases unreviewed. Say the word and I'll make all three.
 
-## Changes made to the original code
+## ⚠️ New finding — not in any earlier sizing estimate
 
-Everything else is the original code, moved in as-is.
+`gradient-backend` requires **Redis** (BullMQ, for workflow automation — `npm run worker` is a **second, separate Node process** from the main API, `src/worker.js`) and expects it via a Docker container in dev (`npm run redis:up`). This is a real infra dependency that wasn't accounted for in the `t4g.medium` sizing discussion so far — the box now needs to run:
 
-- `tps/app.js`, `crm/src/app.js`, `gradient/src/boot.js` — the app / startup split out of `server.js` / `index.js` so it can be imported without listening or starting crons. The old entrypoints still work.
-- `psEnv` replaces `process.env` everywhere (codemod; 147 files).
-- DB config (`tps/config/config.js`, `crm/src/config/database.js`, `gradient/src/database/postgres/{sequelize,config}.js`, `gradient/src/config/agenda.js`) accepts a shared `DATABASE_URL` + `PG_SCHEMA`. TPS's second Sequelize instance (`config/db.js`) now re-exports the one from `models/`.
-- `crm/src/middlewares/readOnly.middleware.js` and `gradient/src/middlewares/activityLog.middleware.js` derive paths from `originalUrl`/`baseUrl`; both now strip the mount prefix so they behave identically under `/crm`, `/gradient` and on a legacy host.
+- 3 API processes (tps, crm, gradient)
+- 1 worker process (gradient's BullMQ worker)
+- Postgres
+- Redis
 
-## Known limits
+That's meaningfully more than the "3 Node processes + Postgres" estimate the sizing conversation was based on. Worth re-checking whether `t4g.medium` (4GB) is still enough, or whether `t4g.large` (8GB, already the leaning recommendation for headroom) becomes the safer floor rather than just "nice to have." Also: Agenda (used by `tps-backend` and `gradient-backend` for scheduled jobs) runs on Postgres directly, not Redis — no extra service there.
 
-- `search_path` is set with Postgres's `options` startup parameter: fine against RDS directly, **not** through PgBouncer in transaction mode.
-- Three Sequelize pools share one RDS `max_connections` — size `DB_POOL_MAX` per brand.
-- Dependency versions differ between the brands (agenda 5 vs 6, bullmq 5 vs 6, multer 1 vs 2, msal 3 vs 5); npm nests the conflicts. Deduping is a later cleanup.
-- CRM's maintenance scripts that read the TPS database (`TPS_DATABASE_URL`) still use a URL; they can become plain cross-schema reads later.
-- One process = one blast radius. Use PM2/ECS restarts + memory limits, and split by `BRANDS` if a brand needs isolating.
+## Still pending
+
+- SSH access to the EC2 once it exists, to run `db/init.sql`, install Postgres 17.9 + Redis, and do the schema-wiring config edits above
+- `.env` files for all 3 services (not copied — check each repo's `.env.example`)
+- nginx config + domain routing for 3 services on one box
+- Backup cron (`pg_dump` → S3), CloudWatch agent, EC2 auto-recovery — as previously discussed
