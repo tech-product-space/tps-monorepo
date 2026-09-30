@@ -41,6 +41,9 @@ app.use(cors({
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
+    // local UIs against the monorepo on :5050 (gradient-next-ui :3003, gradient-admin :3004)
+    "http://localhost:3003",
+    "http://localhost:3004",
     "http://localhost:4200",
     "https://thegradient.co.in",
     "https://www.thegradient.co.in",

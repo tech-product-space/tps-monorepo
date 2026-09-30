@@ -66,8 +66,10 @@ function enabledBrands(raw = process.env.BRANDS) {
 
 /**
  * Refuse to boot a configuration that would silently mix brands:
- *  - every enabled brand needs its own PG_SCHEMA (otherwise all three write to
- *    the same tables — the 25 colliding table names would corrupt each other);
+ *  - brands sharing a database each need their own PG_SCHEMA (otherwise they
+ *    write to the same tables — the 25 colliding table names would corrupt
+ *    each other). A brand on its own database (<BRAND>_DATABASE_URL) needs no
+ *    schema: it runs against that database's `public`, like the old backends;
  *  - no two brands may resolve the same JWT_SECRET (a token minted by one brand
  *    would then pass the other's auth middleware).
  * Only checked when more than one brand shares this process.
@@ -76,12 +78,18 @@ function assertBrandConfig(names) {
   if (names.length < 2) return;
   const problems = [];
 
-  const schemas = new Map();
+  const dbOf = (n) => BRANDS[n].env.DATABASE_URL || "(no DATABASE_URL)";
+  const targets = new Map();
   for (const n of names) {
     const schema = BRANDS[n].env.PG_SCHEMA;
-    if (!schema) problems.push(`${n.toUpperCase()}_PG_SCHEMA is not set`);
-    else if (schemas.has(schema)) problems.push(`${n} and ${schemas.get(schema)} both use PG_SCHEMA="${schema}"`);
-    else schemas.set(schema, n);
+    const sharing = names.filter((o) => o !== n && dbOf(o) === dbOf(n));
+    if (!schema && sharing.length) {
+      problems.push(`${n.toUpperCase()}_PG_SCHEMA is not set, but ${n} shares its database with ${sharing.join(", ")}`);
+      continue;
+    }
+    const target = `${dbOf(n)}\0${schema || "public"}`;
+    if (targets.has(target)) problems.push(`${n} and ${targets.get(target)} both use PG_SCHEMA="${schema || "public"}" in the same database`);
+    else targets.set(target, n);
   }
 
   const secrets = new Map();

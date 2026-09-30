@@ -64,6 +64,9 @@ app.use(
       "https://api.theproductspace.in",
       "http://localhost:5173",
       "http://localhost:4000",
+      // local UIs against the monorepo on :5050 (product-space-next-ui :3001, gradient-next-ui :3003)
+      "http://localhost:3001",
+      "http://localhost:3003",
       "https://gradientlearnings.org",
       "https://www.gradientlearnings.org",
       // The student-facing onboarding portal. It also gets its own, stricter
