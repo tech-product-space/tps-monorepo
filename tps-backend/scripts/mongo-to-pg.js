@@ -40,7 +40,7 @@ const ts = (d) => (d ? new Date(d) : new Date());
     for (const q of srcQ) {
       const r = await pg.query(
         `INSERT INTO tps.interview_questions
-           (mongo_id, title, meta_title, meta_desc, slug, phone, roles, types, company,
+           (public_id, title, meta_title, meta_desc, slug, phone, roles, types, company,
             is_published, user_id, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
         [oid(q._id), q.title, q.metaTitle ?? null, q.metaDesc ?? null,
@@ -52,7 +52,7 @@ const ts = (d) => (d ? new Date(d) : new Date());
       for (const a of q.answers || []) {
         const ra = await pg.query(
           `INSERT INTO tps.interview_answers
-             (mongo_id, question_id, user_id, user_name, is_member, content, liked_by, created_at)
+             (public_id, question_id, user_id, user_name, is_member, content, liked_by, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
           [oid(a._id), r.rows[0].id, a.userId, a.userName, !!a.isMember,
            a.content, (a.likes || []).map(Number), ts(a.createdAt)]
@@ -62,10 +62,10 @@ const ts = (d) => (d ? new Date(d) : new Date());
         for (const f of a.feedback || []) {
           await pg.query(
             `INSERT INTO tps.interview_feedback
-               (mongo_id, answer_id, user_id, user_name, is_member, feedback_text, created_at, updated_at)
+               (public_id, answer_id, user_id, user_name, is_member, feedback_text, created_at, updated_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
             [oid(f._id), ra.rows[0].id, f.userId, f.userName, !!f.isMember,
-             f.feedbackText, ts(f.createdAt), ts(f.updatedAt)]
+             f.feedbackText, ts(f.createdAt), f.updatedAt ? new Date(f.updatedAt) : null]
           );
         }
       }
@@ -75,7 +75,7 @@ const ts = (d) => (d ? new Date(d) : new Date());
       const qid = qMap.get(oid(s.questionId));
       if (!qid) { report.skippedOrphanSaves++; continue; }
       const r = await pg.query(
-        `INSERT INTO tps.saved_questions (mongo_id, user_id, question_id, saved_at)
+        `INSERT INTO tps.saved_questions (public_id, user_id, question_id, saved_at)
          VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, question_id) DO NOTHING RETURNING id`,
         [oid(s._id), s.userId, qid, ts(s.savedAt)]
       );
