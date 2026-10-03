@@ -1,8 +1,7 @@
-const Otp = require("../models/mongo/Otp");
 const sendOtp = require("../service/whatsapp/sendOtp");
 const { verifyOtpToken, generateOtpToken } = require("../utils/otpToken");
 const { verifyOtpHash, generateOtp, hashOtp } = require("../utils/otpUtil");
-const { PhoneVerification, PlatformLead } = require("../models");
+const { PhoneVerification, PlatformLead, Otp } = require("../models");
 
 exports.verifyOtp = async (req, res) => {
   const { otp, otpToken } = req.body;
@@ -22,13 +21,13 @@ exports.verifyOtp = async (req, res) => {
   const { otpId, data } = payload;
 
   //Fetch OTP record
-  const otpDoc = await Otp.findById(otpId);
+  const otpDoc = await Otp.findByTokenId(otpId);
   if (!otpDoc) {
     return res.status(400).json({ error: "Invalid or expired OTP" });
   }
 
   if (otpDoc.expiresAt < new Date()) {
-    await Otp.deleteOne({ _id: otpDoc._id });
+    await otpDoc.destroy();
     return res.status(400).json({ error: "OTP expired" });
   }
 
@@ -64,7 +63,7 @@ exports.verifyOtp = async (req, res) => {
   }
 
   //Delete OTP (one-time use)
-  await Otp.deleteOne({ _id: otpDoc._id });
+  await otpDoc.destroy();
 
   return res.json({
     success: true,
@@ -90,7 +89,7 @@ exports.resendOtp = async (req, res) => {
   const { otpId, data } = payload;
 
   // Fetch OTP
-  const otpDoc = await Otp.findById(otpId);
+  const otpDoc = await Otp.findByTokenId(otpId);
   if (!otpDoc) {
     return res.status(400).json({
       error: "Invalid or expired OTP",
@@ -115,7 +114,7 @@ exports.resendOtp = async (req, res) => {
 
   // Rotate token
   const newOtpToken = generateOtpToken({
-    otpId: otpDoc._id,
+    otpId: otpDoc.id,
     data,
     expiry: "10m",
   });

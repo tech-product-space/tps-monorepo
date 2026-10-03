@@ -1,10 +1,9 @@
 const { Op, Sequelize } = require("sequelize");
-const { PlatformLead, PhoneVerification } = require("../models");
+const { PlatformLead, PhoneVerification, Otp } = require("../models");
 const { getPaginationParams, getMeta } = require("../utils/pagination");
 const { generateLeadToken } = require("../utils/platformLeads/leadToken");
 const { verifyLeadToken } = require("../utils/platformLeads/leadToken");
 const { generateOtp, hashOtp } = require("../utils/otpUtil");
-const Otp = require("../models/mongo/Otp");
 const { generateOtpToken } = require("../utils/otpToken");
 const sendOtp = require("../service/whatsapp/sendOtp");
 const { WHATSAPP_PROVIDER } = require("../constants/whatsapp");
@@ -92,7 +91,7 @@ exports.createLead = async (req, res) => {
     });
 
     const otpToken = generateOtpToken({
-      otpId: otpData._id,
+      otpId: otpData.id,
       data: { leadId: lead.id },
       expiry: "10m",
     });
@@ -197,7 +196,7 @@ exports.updateLeadPhone = async (req, res) => {
     });
 
     const otpToken = generateOtpToken({
-      otpId: otpData._id,
+      otpId: otpData.id,
       data: { leadId: lead.id },
       expiry: "10m",
     });
