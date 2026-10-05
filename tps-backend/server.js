@@ -81,8 +81,10 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.text({ type: ['text/plain', 'text/html'] }));
 app.use(morgan("tiny"));
 
+// "v2" marks the new-account deployment, so a request to / shows which server
+// a domain currently resolves to.
 app.get("/", (req, res) => {
-    res.send("Hello, World!");
+    res.send("Hello, World! v2");
 });
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });

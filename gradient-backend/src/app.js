@@ -94,10 +94,11 @@ app.use("/meta", metaRoutes);
 app.use("/workflows", workflowRoutes);
 app.use("/email-logs", emailLogRoutes);
 
-// Root route
+// Root route — "v2" marks the new-account deployment, so a request to / shows
+// which server a domain currently resolves to.
 app.get("/", (req, res) => {
   res.status(200).json({
-    message: "The Gradient API is running 🚀",
+    message: "The Gradient API is running 🚀 v2",
     environment: env.APP_ENVIRONMENT,
     timestamp: new Date(),
   });
