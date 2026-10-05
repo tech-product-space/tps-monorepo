@@ -57,7 +57,7 @@ async function scheduleBlogPublish(blogId, publishAt) {
   // Cancel existing schedule
   await agenda.cancel({
     name: "publish-blog",
-    "data.blogId": blogId,
+    data: { blogId: blogId },
   });
 
   // Schedule new publish job
@@ -73,7 +73,7 @@ async function scheduleBlogPublish(blogId, publishAt) {
 async function cancelBlogPublish(blogId) {
   const cancelledCount = await agenda.cancel({
     name: "publish-blog",
-    "data.blogId": blogId,
+    data: { blogId: blogId },
   });
 
   console.log("❌ Cancelled jobs:", cancelledCount);

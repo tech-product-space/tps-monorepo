@@ -1,19 +1,36 @@
-const Agenda = require("agenda");
+const { Agenda } = require("agenda");
+const { PostgresBackend } = require("@agendajs/postgres-backend");
 const { sendAdminAlert } = require("../service/mail/mailservice");
 
+// Scheduled jobs live in Postgres (schema from DB_SCHEMA, default "tps"), not
+// MongoDB. Agenda v6 and its Postgres backend are ESM-only; Node >= 22.12 can
+// require() them from this CommonJS file.
+//
+// Development gets its own table, as it had its own Mongo collection: local
+// dev connects to the same database (via SSH tunnel) and must not pick up
+// production jobs.
 const isDev = process.env.NODE_ENV === "development";
-const collection = isDev ? "agendaJobs_dev" : "agendaJobs";
+const schema = process.env.DB_SCHEMA || "tps";
 
 const agenda = new Agenda({
-  db: {
-    address: process.env.MONGO_DB_URL,
-    collection,
-  },
+  backend: new PostgresBackend({
+    poolConfig: {
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT || 5432),
+      user: process.env.DB_USER,
+      password: process.env.DB_PASS,
+      database: process.env.DB_NAME,
+      options: `-c search_path=${schema}`,
+      ...(process.env.DB_SSL === "true" ? { ssl: { rejectUnauthorized: false } } : {}),
+    },
+    tableName: isDev ? "agenda_jobs_dev" : "agenda_jobs",
+    logTableName: isDev ? "agenda_logs_dev" : "agenda_logs",
+  }),
 });
 
 if (process.env.SCHEDULED_JOBS_ENABLED === "true") {
   agenda.on("ready", async () => {
-    console.log("✅ Agenda v5 connected to MongoDB!");
+    console.log(`✅ Agenda v6 connected to Postgres (schema ${schema})`);
     (async () => {
       await agenda.start();
       console.log("🟢 Agenda Started");

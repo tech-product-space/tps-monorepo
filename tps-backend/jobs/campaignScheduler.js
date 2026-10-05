@@ -268,7 +268,7 @@ agenda.define("send-campaign", async (job) => {
 async function scheduleCampaign(campaignId, scheduleAt) {
   log(`📅 Scheduling campaign ${campaignId} at ${scheduleAt}`);
 
-  await agenda.cancel({ name: "send-campaign", "data.campaignId": campaignId });
+  await agenda.cancel({ name: "send-campaign", data: { campaignId: campaignId } });
   await agenda.schedule(new Date(scheduleAt), "send-campaign", { campaignId });
 
   log(`✅ Campaign ${campaignId} scheduled.`);
@@ -276,7 +276,7 @@ async function scheduleCampaign(campaignId, scheduleAt) {
 
 async function sendCampaignNow(campaignId) {
   log(`⚡ Dispatching campaign ${campaignId} immediately.`);
-  await agenda.cancel({ name: "send-campaign", "data.campaignId": campaignId });
+  await agenda.cancel({ name: "send-campaign", data: { campaignId: campaignId } });
   await agenda.now("send-campaign", { campaignId });
 }
 
@@ -284,7 +284,7 @@ async function cancelCampaignSchedule(campaignId) {
   log(`🛑 Cancelling scheduled job for campaign ${campaignId}`);
   return agenda.cancel({
     name: "send-campaign",
-    "data.campaignId": campaignId,
+    data: { campaignId: campaignId },
   });
 }
 

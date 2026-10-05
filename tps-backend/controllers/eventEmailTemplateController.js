@@ -429,7 +429,7 @@ module.exports = {
     
     await agenda.cancel({
       name: JOB_NAME,
-      "data.templateId": template.id,
+      data: { templateId: template.id },
     });
 
     // Mark as sent

@@ -17,12 +17,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@agendajs/postgres-backend": "^3.0.3",
     "@aws-sdk/client-s3": "^3.787.0",
     "@aws-sdk/client-ses": "^3.1012.0",
     "@aws-sdk/lib-storage": "^3.787.0",
     "@aws-sdk/s3-request-presigner": "^3.914.0",
     "@azure/msal-node": "^3.6.4",
-    "agenda": "^5.0.0",
+    "agenda": "^6.2.3",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
@@ -36,7 +37,6 @@
     "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.2",
     "moment-timezone": "^0.6.0",
-    "mongoose": "^8.15.0",
     "morgan": "^1.10.1",
     "multer": "^1.4.5-lts.2",
     "node-cron": "^4.2.1",
@@ -47,6 +47,7 @@
     "ulid": "^3.0.1"
   },
   "devDependencies": {
+    "mongoose": "^8.24.5",
     "nodemon": "^3.1.9",
     "sequelize-cli": "^6.6.3"
   }

@@ -4,7 +4,6 @@ const cors = require("cors");
 const morgan = require("morgan");
 const sequelize = require("./config/db");
 
-const connectMongoDB = require("./config/mongoDb");
 
 require("./cron");
 require("./jobs");
@@ -68,7 +67,6 @@ const expenseFormRoutes = require("./routes/expenseFormRoutes");
 const sesAnalyticsRoutes = require("./routes/sesAnalyticsRoutes");
 
 
-// MongoDB routes
 const interviewRoutes = require('./routes/interviewRoutes');
 
 // error Routes
@@ -154,13 +152,11 @@ app.use(notFound);
 app.use(errorHandler);
 
 
-// MongoDB routes
 
 sequelize
     .authenticate()
     .then(async () => {
         console.log("PostgreSQL Connected Successfully");
-        await connectMongoDB();
         app.listen(PORT, () => {
             console.log(`Server running on http://localhost:${PORT}`);
         });

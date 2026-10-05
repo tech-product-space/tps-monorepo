@@ -166,7 +166,7 @@ async function scheduleEventEmailTemplate(templateId, scheduledAt) {
   // Cancel existing schedule
   await agenda.cancel({
     name: JOB_NAME,
-    "data.templateId": templateId,
+    data: { templateId: templateId },
   });
 
   console.log("Now:", new Date());
@@ -188,7 +188,7 @@ async function scheduleEventEmailTemplate(templateId, scheduledAt) {
 async function cancelEventEmailTemplate(templateId) {
   const cancelledCount = await agenda.cancel({
     name: JOB_NAME,
-    "data.templateId": templateId,
+    data: { templateId: templateId },
   });
 
   console.log("❌ Cancelled jobs:", cancelledCount);

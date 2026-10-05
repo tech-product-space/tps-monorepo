@@ -50,7 +50,7 @@ agenda.define(JOB_NAME, async (job) => {
 // Debounces the "new reply" email: a burst of staff messages on the same
 // ticket collapses into a single scheduled job (the latest call wins).
 async function scheduleSupportReplyNotification(ticketId) {
-  await agenda.cancel({ name: JOB_NAME, "data.ticketId": ticketId });
+  await agenda.cancel({ name: JOB_NAME, data: { ticketId: ticketId } });
   await agenda.schedule(NOTIFY_DELAY, JOB_NAME, { ticketId });
 }
 
