@@ -151,3 +151,5 @@ db/.db_credentials
 
 # macOS
 .DS_Store
+# AWS tunnel credentials (per developer) - never commit
+*-tunnel-credentials.txt
