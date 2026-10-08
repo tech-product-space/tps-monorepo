@@ -74,7 +74,10 @@ const launch = ({ by, mode, targets, envBackup, note }) => {
   }));
   fs.writeFileSync(path.join(dir, "status"), "starting");
   fs.copyFileSync(SCRIPT, path.join(dir, "deploy.sh"));
-  const child = spawn("bash", [path.join(dir, "deploy.sh"), dir], {
+  // `setsid -f` forks again so the script is re-parented to init. pm2 kills an
+  // app's whole process tree when restarting it, and a plain detached child is
+  // still in tps-api's tree, so restarting tps-api would kill its own deploy.
+  const child = spawn("setsid", ["-f", "bash", path.join(dir, "deploy.sh"), dir], {
     detached: true,
     stdio: "ignore",
     env: {
