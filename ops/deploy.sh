@@ -54,7 +54,10 @@ PY
 restart_and_check() {   # <backend>
   local b=$1 p i
   log "Restarting $b: $(apps_of $b)"
-  pm2 restart $(apps_of $b) --update-env > /dev/null || return 1
+  # No --update-env: it would copy this shell's variables into the app, where
+  # they beat the app's own .env (dotenv never overrides). Each app reads its
+  # .env when it starts, so a plain restart picks up .env edits.
+  pm2 restart $(apps_of $b) > /dev/null || return 1
   p=$(port_of $b)
   for i in $(seq 1 30); do
     curl -sf -m 3 "http://127.0.0.1:$p/health" > /dev/null && { log "  $b healthy on :$p"; return 0; }

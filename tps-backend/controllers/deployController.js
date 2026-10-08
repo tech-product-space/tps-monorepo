@@ -80,8 +80,16 @@ const launch = ({ by, mode, targets, envBackup, note }) => {
   const child = spawn("setsid", ["-f", "bash", path.join(dir, "deploy.sh"), dir], {
     detached: true,
     stdio: "ignore",
+    // A clean environment, never tps-api's own: pm2 hands the restarting
+    // shell's variables to the app, and dotenv does not override variables that
+    // are already set, so tps's PORT and DB settings would win over another
+    // backend's .env. (That is how a crm .env save once started crm on :3000.)
     env: {
-      ...process.env,
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      USER: process.env.USER,
+      LANG: process.env.LANG || "C.UTF-8",
+      PM2_HOME: process.env.PM2_HOME || `${process.env.HOME}/.pm2`,
       DEPLOY_APP_DIR: APP_DIR,
       DEPLOY_MODE: mode,
       DEPLOY_TARGETS: targets.join(" "),
