@@ -3,7 +3,10 @@ import express from "express";
 import { adminAuth } from "../../middlewares/adminAuth.middleware.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { previewAuth } from "../../middlewares/previewAuth.middleware.js";
-import { submissionLimiter } from "../../middlewares/rateLimit.middleware.js";
+import {
+  previewLimiter,
+  submissionLimiter,
+} from "../../middlewares/rateLimit.middleware.js";
 
 import {
   checkSlugAvailability,
@@ -49,6 +52,11 @@ import {
   listProjectLeads,
   unlockProjectGuide,
 } from "../../controllers/project/lead.controller.js";
+
+import {
+  createProjectPreviewToken,
+  verifyProjectPreviewSession,
+} from "../../controllers/project/preview.controller.js";
 
 import { reviewProject } from "../../controllers/project/review.controller.js";
 import { submitProject } from "../../controllers/project/submission.controller.js";
@@ -149,6 +157,20 @@ router.patch("/admin/projects/:id/toggle-status", adminAuth, toggleProjectStatus
 // review.controller.js.
 router.post("/admin/projects/:id/review", adminAuth, reviewProject);
 router.delete("/admin/projects/:id", adminAuth, deleteProject);
+
+/* ── preview ────────────────────────────────────────────────────────────── */
+// See `../../controllers/project/preview.controller.js`. Mint is admin-only;
+// verify is public because the caller is the marketing site's route handler,
+// which holds no admin credentials — the single-use launch token it presents is
+// the credential. Both share the limiter, as on recordings.
+router.post(
+  "/admin/projects/:id/preview-token",
+  adminAuth,
+  previewLimiter,
+  createProjectPreviewToken,
+);
+
+router.post("/preview/verify", previewLimiter, verifyProjectPreviewSession);
 
 /* ── public ─────────────────────────────────────────────────────────────── */
 router.get("/public/categories", listPublicCategories);

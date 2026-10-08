@@ -34,7 +34,7 @@ export default {
 
   assets: {
     /** CDN domain in front of the S3 bucket, matching the websites' storage helper. */
-    baseUrl: process.env.AWS_FILE_BASE_URL || "https://assets.thegradient.co.in",
+    baseUrl: process.env.AWS_FILE_BASE_URL || "https://assets.gradientlearnings.org",
   },
 
   s3: {

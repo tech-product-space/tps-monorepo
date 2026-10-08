@@ -260,6 +260,9 @@ export const getPublicProjectBySlug = asyncWrapper(async (req, res) => {
       // button point at the right place" is one of the things an admin opens a
       // preview to answer, and they are already authenticated to see it.
       ...presentProject(project, { includeDownloadUrl: previewing }),
+      // Tells the site it may draw the preview pill and must not be indexed.
+      // Absent from a public response, so the shape a visitor gets is unchanged.
+      ...(previewing ? { isPreview: true } : {}),
       steps: gatedSteps,
     },
   });

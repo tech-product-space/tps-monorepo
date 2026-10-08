@@ -26,20 +26,20 @@ const CLEAN = process.argv.includes("--clean");
 const COUNT_NOTE = "14 rows against a page size of 12 — page 2 exists.";
 
 const THUMBNAILS = [
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1787738239580-B3%20(1).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1787652514621-B%20(21).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1787554255859-B%20(17).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1787547327955-B%20(16).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1787366801450-B%20(16).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1787365498034-B%20(14).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1786973348702-23rd.png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1786347326224-B%20(10).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1786073568967-Build%20AI%20Agents%20-%20Banner%2010.png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1786072803021-B%20(10).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1786001156985-B%20(9).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1786000430468-B%20(8).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1785998336329-B%20(7).png",
-  "https://tps-storage.s3.ap-south-1.amazonaws.com/events/1785997721880-B%20(5).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1787738239580-B3%20(1).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1787652514621-B%20(21).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1787554255859-B%20(17).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1787547327955-B%20(16).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1787366801450-B%20(16).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1787365498034-B%20(14).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1786973348702-23rd.png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1786347326224-B%20(10).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1786073568967-Build%20AI%20Agents%20-%20Banner%2010.png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1786072803021-B%20(10).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1786001156985-B%20(9).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1786000430468-B%20(8).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1785998336329-B%20(7).png",
+  "https://new-tps-storage.s3.ap-south-1.amazonaws.com/events/1785997721880-B%20(5).png",
 ];
 
 /**

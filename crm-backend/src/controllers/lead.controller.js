@@ -3,6 +3,7 @@ const { Lead, LeadProfile, LeadNote, User, Status, Product, Activity, Subsource,
 const { Sequelize } = require('sequelize');
 const leadService = require('../services/lead.service');
 const leadFilter = require('../services/leadFilter.service');
+const metaCapi = require('../services/metaCapi.service');
 const { parsePagination, buildPage } = require('../utils/pagination');
 const { isCalcomProduct } = require('../config/calcom');
 const jwt = require("jsonwebtoken");
@@ -579,6 +580,11 @@ const updateLead = async (req, res) => {
           new: { status_id: leadUpdates.status_id, status_label: newStatusLabel, loss_reason: leadUpdates.loss_reason || null },
         }
       });
+
+      // Report the conversion to Meta. Fire-and-forget: a Meta outage must not fail the update.
+      if (metaCapi.isEnrolledStatus(leadUpdates.status_id, newStatusLabel)) {
+        metaCapi.sendEnrolledEvent(lead, profile);
+      }
     }
 
     if (leadUpdates.next_followup !== undefined && String(leadUpdates.next_followup) !== String(oldFollowup)) {
