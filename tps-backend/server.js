@@ -65,6 +65,7 @@ const supportRoutes = require("./routes/supportRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const expenseFormRoutes = require("./routes/expenseFormRoutes");
 const sesAnalyticsRoutes = require("./routes/sesAnalyticsRoutes");
+const deployRoutes = require("./routes/deployRoutes");
 
 
 const interviewRoutes = require('./routes/interviewRoutes');
@@ -149,6 +150,7 @@ app.use("/support", supportRoutes)
 app.use("/expenses", expenseRoutes)
 app.use("/expense-forms", expenseFormRoutes)
 app.use("/api/v1/ses-analytics", sesAnalyticsRoutes)
+app.use("/internal/deploy", deployRoutes)
 
 app.use(notFound);
 app.use(errorHandler);
