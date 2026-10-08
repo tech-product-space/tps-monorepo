@@ -11,7 +11,7 @@ const Approved = ({ name, eventName, whatsappGroupLink }) => {
       <table align="center" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#fff; border-radius:8px; margin:20px auto; box-shadow: 0 2px 6px rgba(0,0,0,0.05);">
         <tr>
           <td align="center" style="padding:20px;">
-            <img src="https://tps-storage.s3.ap-south-1.amazonaws.com/blogs/product-space.png" width="150" />
+            <img src="https://new-tps-storage.s3.ap-south-1.amazonaws.com/blogs/product-space.png" width="150" />
           </td>
         </tr>
         <tr>

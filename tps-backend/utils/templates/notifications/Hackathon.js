@@ -11,7 +11,7 @@ const Hackathon = ({ name, eventName, whatsappGroupLink, date }) => {
       <table align="center" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px; width:100%; background:#ffffff; border-radius:8px; margin:20px auto; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
         <tr>
           <td align="center" style="padding:20px 20px 10px;">
-            <img src="https://tps-storage.s3.ap-south-1.amazonaws.com/blogs/product-space.png" width="150" alt="Product Space" style="display:block; border:0; outline:none; text-decoration:none;" />
+            <img src="https://new-tps-storage.s3.ap-south-1.amazonaws.com/blogs/product-space.png" width="150" alt="Product Space" style="display:block; border:0; outline:none; text-decoration:none;" />
           </td>
         </tr>
 
