@@ -163,7 +163,7 @@ const parseEnv = (text) => {
   text.split("\n").forEach((line, i) => {
     const t = line.trim();
     if (!t || t.startsWith("#")) return;
-    const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(t);
+    const m = /^(?:export\s+)?([A-Za-z0-9_]+)\s*=/.exec(t);
     if (!m) throw new Error(`Line ${i + 1} is not KEY=value: "${t.slice(0, 40)}"`);
     if (keys.includes(m[1])) throw new Error(`${m[1]} is set twice (line ${i + 1})`);
     keys.push(m[1]);
@@ -173,7 +173,7 @@ const parseEnv = (text) => {
 
 // Keys of a file that may not pass parseEnv (an existing .env with a stray line).
 const looseKeys = (text) =>
-  text.split("\n").map((l) => /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(l)?.[1]).filter(Boolean);
+  text.split("\n").map((l) => /^\s*(?:export\s+)?([A-Za-z0-9_]+)\s*=/.exec(l)?.[1]).filter(Boolean);
 
 const valueOf = (text, key) => {
   const m = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=(.*)$`, "m").exec(text);
