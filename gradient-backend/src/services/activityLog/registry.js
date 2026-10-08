@@ -321,6 +321,13 @@ export const ACTIVITY_REGISTRY = {
     verbFrom: (ctx) => (ctx.body?.decision === "approved" ? V.APPROVED : V.REJECTED),
   }),
   "DELETE /projects/admin/projects/:id": entry(E.PROJECT, V.DELETED),
+  // Worth logging for the same reason as the free-course one: it mints a link
+  // that bypasses the publish and review scope. The token is redacted.
+  "POST /projects/admin/projects/:id/preview-token": entry(
+    E.PROJECT,
+    V.PREVIEWED,
+    { summary: "Generated a preview link" },
+  ),
 
   "POST /projects/admin/categories": entry(E.PROJECT_CATEGORY, V.CREATED, {
     entityIdFrom: "response.data.id",
