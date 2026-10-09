@@ -36,6 +36,7 @@ const LIST_ATTRS = [
   "level",
   "categoryId",
   "downloadUrl",
+  "datasetUrl",
   "status",
   "source",
   "isPublished",
@@ -237,6 +238,7 @@ const pickWritable = (body) => ({
   categoryId: body.categoryId,
   level: body.level,
   downloadUrl: body.downloadUrl,
+  datasetUrl: body.datasetUrl,
   thumbnail: body.thumbnail,
   scheduledAt: body.scheduledAt,
 });
@@ -325,6 +327,7 @@ const DIFF_FIELDS = [
   "level",
   "summary",
   "downloadUrl",
+  "datasetUrl",
   "prerequisites",
   "skills",
   "settings",
@@ -349,6 +352,20 @@ export const updateProject = asyncWrapper(async (req, res) => {
         .status(400)
         .json({ success: false, message: "That category does not exist" });
     }
+  }
+
+  // `null` clears the dataset; anything else has to be a link the site can
+  // render into an href — the same rule as `downloadUrl`, checked here because
+  // the dataset is optional and so never meets the publish check.
+  if (
+    req.body.datasetUrl !== undefined &&
+    req.body.datasetUrl !== null &&
+    !isPublicHttpUrl(req.body.datasetUrl)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "The dataset link must be a full http:// or https:// URL",
+    });
   }
 
   const updates = withoutUndefined({

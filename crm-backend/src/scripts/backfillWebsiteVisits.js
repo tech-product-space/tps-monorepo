@@ -25,9 +25,23 @@
  *   node src/scripts/backfillWebsiteVisits.js --from=2026-08-01
  *   node src/scripts/backfillWebsiteVisits.js --from=2026-08-01 --to=2026-08-15
  *   node src/scripts/backfillWebsiteVisits.js --repair-only
+ *
+ * ── ps-v3 setup (one local Postgres, one database, one schema per service) ──
+ *
+ * TPS and the CRM now live in the same `productspace` database, in the `tps`
+ * and `crm` schemas. So:
+ *
+ *   - TPS_DATABASE_URL is optional. Unset, the CRM's own DATABASE_URL is used,
+ *     which already points at the shared database.
+ *   - The TPS table is always read schema-qualified (TPS_DB_SCHEMA, default
+ *     `tps`), so it can never be confused with anything in `crm` or `public`.
+ *   - SSL follows DB_SSL, like the CRM's own connection. The local Postgres has
+ *     no SSL listener; DB_SSL=true restores the old RDS behaviour.
  */
 
-require('dotenv').config();
+// Always the crm-backend .env, whatever folder the script is started from —
+// the same file src/config/database.js loads, so both connections agree.
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 
 const { Sequelize, QueryTypes } = require('sequelize');
 const { sequelize, WebsiteVisit } = require('../models');
@@ -58,13 +72,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chunk = (arr, n) =>
   Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
+// Interpolated into SQL, so it must be a plain identifier — never anything else.
+const TPS_SCHEMA = process.env.TPS_DB_SCHEMA || 'tps';
+if (!/^[a-z_][a-z0-9_]*$/i.test(TPS_SCHEMA)) {
+  throw new Error(`TPS_DB_SCHEMA "${TPS_SCHEMA}" is not a valid schema name.`);
+}
+const TPS_TABLE = `"${TPS_SCHEMA}"."VisitorNotificationHistory"`;
+
 const tpsConnection = () => {
-  if (!process.env.TPS_DATABASE_URL) {
-    throw new Error('TPS_DATABASE_URL is not set — cannot read the TPS database.');
+  const url = process.env.TPS_DATABASE_URL || process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error('Neither TPS_DATABASE_URL nor DATABASE_URL is set — cannot read the TPS database.');
   }
-  return new Sequelize(process.env.TPS_DATABASE_URL, {
+
+  // TPS_DB_SSL overrides for the odd case where TPS sits elsewhere; otherwise
+  // the same switch the CRM's own connection uses.
+  const sslFlag = process.env.TPS_DB_SSL ?? process.env.DB_SSL;
+  const useSsl = sslFlag === 'true';
+
+  return new Sequelize(url, {
     dialect: 'postgres',
-    dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+    dialectOptions: {
+      ...(useSsl ? { ssl: { require: true, rejectUnauthorized: false } } : {}),
+      // Belt and braces: every query below is schema-qualified anyway.
+      options: `-c search_path=${TPS_SCHEMA}`,
+    },
+    // Read-only, one query at a time. No reason to hold more connections on a
+    // box the live API shares.
+    pool: { max: 2, min: 0, idle: 10000 },
     logging: false,
   });
 };
@@ -77,8 +112,22 @@ const tpsConnection = () => {
  * Done in one statement rather than a loop — the database is remote and throttled,
  * so several thousand round trips would take far longer than the import itself.
  * Idempotent: the WHERE clause skips rows that already agree.
+ *
+ * Scoped to the import range: only leads with at least one visit inside
+ * --from/--to are considered. Unscoped, it rewrote every Website Visitors lead
+ * in the CRM whose dates differed by even a millisecond from its visits — over
+ * 7,800 leads for a 5-day gap, nearly all of them untouched by the import.
+ * --repair-only keeps the old, whole-table behaviour for when that is wanted.
  */
-const REPAIR_SQL = `
+const REPAIR_SCOPE_SQL = `
+    AND EXISTS (
+      SELECT 1 FROM website_visits wv
+       WHERE wv.lead_id = l.id
+         AND wv.occurred_at >= :from
+         AND wv.occurred_at <= :to
+    )`;
+
+const repairSql = (scoped) => `
   WITH agg AS (
     SELECT lead_id,
            MIN(occurred_at) AS first_seen,
@@ -107,10 +156,19 @@ const REPAIR_SQL = `
       OR l.lead_update_date IS DISTINCT FROM agg.last_seen
       OR COALESCE(l.additional_data->>'page_url', '') IS DISTINCT FROM COALESCE(latest.page_url, '')
     )
+    ${scoped ? REPAIR_SCOPE_SQL : ''}
 `;
 
-async function repair({ dryRun }) {
-  const rows = await sequelize.query(REPAIR_SQL, { type: QueryTypes.SELECT });
+/**
+ * @param {{ dryRun: boolean, from?: Date, to?: Date }} opts  pass from+to to
+ *   limit the repair to leads visited in that range; omit both for all leads.
+ */
+async function repair({ dryRun, from, to }) {
+  const scoped = !!(from && to);
+  const rows = await sequelize.query(repairSql(scoped), {
+    replacements: scoped ? { from, to } : {},
+    type: QueryTypes.SELECT,
+  });
 
   console.log('');
   console.log(`  Leads needing their dates corrected: ${rows.length}`);
@@ -157,6 +215,9 @@ async function repair({ dryRun }) {
   }
 }
 
+// Module-level so the exit handlers can always close it, success or failure.
+let tps = null;
+
 async function main() {
   if (REPAIR_ONLY) {
     console.log('\n  Repair pass only — no import.\n');
@@ -172,17 +233,38 @@ async function main() {
     process.exit(1);
   }
 
-  const tps = tpsConnection();
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    console.error('Could not read --from / --to. Use YYYY-MM-DD, e.g. --from=2026-10-05');
+    process.exit(1);
+  }
 
-  const [{ db }] = await tps.query('SELECT current_database() AS db', {
-    type: QueryTypes.SELECT,
-  });
+  if (from > to) {
+    console.error(`--from (${from.toISOString()}) is after --to (${to.toISOString()}).`);
+    process.exit(1);
+  }
+
+  tps = tpsConnection();
+
+  const [{ db, found }] = await tps.query(
+    `SELECT current_database() AS db,
+            to_regclass(:table) IS NOT NULL AS found`,
+    { replacements: { table: TPS_TABLE }, type: QueryTypes.SELECT },
+  );
+
+  // Fail loudly here rather than half-way through: a wrong schema or database
+  // would otherwise surface as "relation does not exist" mid-import.
+  if (!found) {
+    throw new Error(
+      `${TPS_TABLE} not found in database "${db}". ` +
+        'Check TPS_DATABASE_URL / DATABASE_URL and TPS_DB_SCHEMA.',
+    );
+  }
 
   const stats = await tps.query(
     `SELECT COUNT(*)::int AS total,
             COUNT(DISTINCT "visitorId")::int AS people,
             COUNT(*) FILTER (WHERE phone IS NOT NULL)::int AS with_phone
-       FROM "VisitorNotificationHistory"
+       FROM ${TPS_TABLE}
       WHERE timestamp >= :from AND timestamp <= :to`,
     { replacements: { from, to }, type: QueryTypes.SELECT },
   );
@@ -191,7 +273,7 @@ async function main() {
   // How many of these the CRM already holds, so the dry run reports the real
   // amount of work rather than the size of the range.
   const ids = await tps.query(
-    `SELECT id FROM "VisitorNotificationHistory"
+    `SELECT id FROM ${TPS_TABLE}
       WHERE timestamp >= :from AND timestamp <= :to`,
     { replacements: { from, to }, type: QueryTypes.SELECT },
   );
@@ -201,7 +283,7 @@ async function main() {
   }
 
   console.log('');
-  console.log(`  TPS database   : ${db}`);
+  console.log(`  TPS database   : ${db}  (table ${TPS_TABLE})`);
   console.log(`  CRM database   : ${sequelize.config.database}`);
   console.log(`  Range          : ${from.toISOString()}  ->  ${to.toISOString()}`);
   console.log(`  Records        : ${total}`);
@@ -214,15 +296,14 @@ async function main() {
 
   if (!total) {
     console.log('  Nothing in range. Done.');
-    await tps.close();
     return;
   }
 
   if (DRY_RUN) {
     const sample = await tps.query(
-      `SELECT id, phone, page, timestamp FROM "VisitorNotificationHistory"
+      `SELECT id, phone, page, timestamp FROM ${TPS_TABLE}
         WHERE timestamp >= :from AND timestamp <= :to
-        ORDER BY timestamp ASC LIMIT 5`,
+        ORDER BY timestamp ASC, id ASC LIMIT 5`,
       { replacements: { from, to }, type: QueryTypes.SELECT },
     );
     console.log('  Oldest 5 in range:');
@@ -232,30 +313,39 @@ async function main() {
       );
     });
 
-    await repair({ dryRun: true });
+    await repair({ dryRun: true, from, to });
 
     console.log('');
     console.log('  Re-run without --dry-run to apply.');
     console.log('');
-    await tps.close();
     return;
   }
 
   const counts = { created: 0, history_only: 0, duplicate: 0, unmatched: 0, failed: 0 };
   const failures = [];
   let done = 0;
-  let offset = 0;
+  // Keyset paging on (timestamp, id) rather than OFFSET. Two visits with the same
+  // timestamp have no fixed order under ORDER BY timestamp alone, so OFFSET could
+  // skip one and repeat the other between pages. The id tiebreak makes the order
+  // total, and the cursor makes each page a cheap index seek.
+  let cursor = null;
 
   for (;;) {
     // Oldest first — see the header.
     const batch = await tps.query(
       `SELECT id, "visitorId", name, email, phone, page, timestamp
-         FROM "VisitorNotificationHistory"
+         FROM ${TPS_TABLE}
         WHERE timestamp >= :from AND timestamp <= :to
-        ORDER BY timestamp ASC
-        LIMIT :limit OFFSET :offset`,
+          ${cursor ? 'AND (timestamp, id) > (CAST(:cursorTs AS timestamptz), CAST(:cursorId AS integer))' : ''}
+        ORDER BY timestamp ASC, id ASC
+        LIMIT :limit`,
       {
-        replacements: { from, to, limit: BATCH, offset },
+        replacements: {
+          from,
+          to,
+          limit: BATCH,
+          ...(cursor ? { cursorTs: cursor.ts, cursorId: cursor.id } : {}),
+        },
         type: QueryTypes.SELECT,
       },
     );
@@ -291,10 +381,9 @@ async function main() {
       if (DELAY_MS) await sleep(DELAY_MS);
     }
 
-    offset += batch.length;
+    const last = batch[batch.length - 1];
+    cursor = { ts: last.timestamp, id: last.id };
   }
-
-  await tps.close();
 
   console.log('');
   console.log('  ── Import done ──────────────────────────');
@@ -314,20 +403,25 @@ async function main() {
   if (!SKIP_REPAIR) {
     console.log('');
     console.log('  ── Repairing lead dates ─────────────────');
-    await repair({ dryRun: false });
+    await repair({ dryRun: false, from, to });
   }
 
   console.log('');
 }
 
+const closeAll = async () => {
+  if (tps) await tps.close().catch(() => {});
+  await sequelize.close().catch(() => {});
+};
+
 main()
   .then(async () => {
-    await sequelize.close();
+    await closeAll();
     process.exit(0);
   })
   .catch(async (err) => {
     console.error('\nBackfill failed:', err.message);
     console.error(err.stack);
-    await sequelize.close().catch(() => {});
+    await closeAll();
     process.exit(1);
   });

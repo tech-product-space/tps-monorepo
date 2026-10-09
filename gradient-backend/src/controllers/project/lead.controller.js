@@ -22,7 +22,8 @@ const { Project, ProjectCategory, ProjectLead } = db;
 /**
  * The download gate.
  *
- * **This file is the only place `downloadUrl` reaches the public.**
+ * **This file is the only place `downloadUrl` (and `datasetUrl`) reaches the
+ * public.**
  * `public.controller.js` strips it from every payload while the project is
  * gated. A GitHub link is not a secret, but shipping it in the page payload and
  * hiding the button in React would make the gate decorative and the download
@@ -157,7 +158,13 @@ export const createProjectLead = asyncWrapper(async (req, res) => {
   if (!resolveProjectSettings(project).gateDownload) {
     return res
       .status(200)
-      .json({ success: true, data: { downloadUrl: project.downloadUrl } });
+      .json({
+        success: true,
+        data: {
+          downloadUrl: project.downloadUrl,
+          datasetUrl: project.datasetUrl ?? null,
+        },
+      });
   }
 
   /**
@@ -212,6 +219,9 @@ export const createProjectLead = asyncWrapper(async (req, res) => {
     success: true,
     data: {
       downloadUrl: project.downloadUrl,
+      // One gate for both files: whoever passed it for the project gets the
+      // dataset too, rather than a second form for the same project.
+      datasetUrl: project.datasetUrl ?? null,
       emailed: emailResult.sent,
     },
   });

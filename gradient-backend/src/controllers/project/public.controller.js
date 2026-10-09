@@ -47,6 +47,10 @@ const presentProject = (project, { includeDownloadUrl = false } = {}) => {
     // An ungated project's link ships with the payload — that switch means
     // "downloads for anybody" and the gate endpoint is not on the path to one.
     downloadUrl: gated && !includeDownloadUrl ? null : json.downloadUrl,
+    // The dataset rides the same gate as the project file. `hasDataset` is
+    // what lets the site draw its button without being handed the link.
+    datasetUrl: gated && !includeDownloadUrl ? null : json.datasetUrl ?? null,
+    hasDataset: Boolean(json.datasetUrl),
   };
 };
 
@@ -60,6 +64,7 @@ const CARD_ATTRS = [
   "prerequisites",
   "skills",
   "downloadUrl",
+  "datasetUrl",
   "settings",
   "source",
   "publishedAt",

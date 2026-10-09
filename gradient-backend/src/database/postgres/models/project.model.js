@@ -110,6 +110,16 @@ export default (sequelize) => {
         allowNull: true,
       },
 
+      /**
+       * The "Download Dataset" target — optional, and not checked on publish.
+       * Gated exactly like `downloadUrl`: stripped from the public payload while
+       * the download gate is on, emitted only by the gate's own POST.
+       */
+      datasetUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+
       /** S3 key — the guide header and the OG image. The card has no image. */
       thumbnail: {
         type: DataTypes.STRING,
