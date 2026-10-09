@@ -28,6 +28,11 @@ const {
   wrapEmailTemplate,
 } = require("../../utils/email/htmlHelpers");
 
+const {
+  renderTemplateEmail,
+  templateFieldKeys,
+} = require("../../utils/email/templateHtml");
+
 const { filterUnsubscribedRecipients } = require("../../service/campaign/filterUnsubscribedRecipients");
 
 
@@ -197,6 +202,17 @@ exports.schedule = async (req, res) => {
       });
     }
 
+    // A template field left unfilled would go out as an empty heading or a
+    // button to nowhere, to every recipient at once.
+    if (campaign.content_mode === "template") {
+      const unfilled = templateFieldKeys(campaign.content);
+      if (unfilled.length) {
+        return res.status(400).json({
+          message: `Fill in the template fields before sending: ${unfilled.join(", ")}`,
+        });
+      }
+    }
+
     /* --------------------------------
        SEND NOW
     -------------------------------- */
@@ -276,12 +292,16 @@ exports.sendTestMail = async (req, res) => {
 
   const campaign = await Campaign.findByPk(req.params.id);
 
-  const cleanedBody = cleanHtml(campaign.content);
-
   const subject = replacePlaceholders(campaign.subject, { name });
-  const body = replacePlaceholders(cleanedBody, { name });
 
-  const htmlContent = wrapEmailTemplate(body);
+  // No unsubscribe link in tests, matching the editor path below.
+  const htmlContent =
+    campaign.content_mode === "template"
+      ? renderTemplateEmail({
+          html: campaign.content,
+          recipient: { name, email },
+        })
+      : wrapEmailTemplate(replacePlaceholders(cleanHtml(campaign.content), { name }));
 
   await sendEmail({
     to: email,

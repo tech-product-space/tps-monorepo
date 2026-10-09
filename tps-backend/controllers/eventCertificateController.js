@@ -10,6 +10,7 @@ const {
   cleanHtml,
   wrapEmailTemplate,
 } = require("../utils/email/htmlHelpers.js");
+const { renderIfTemplate } = require("../utils/email/templateHtml");
 const { Op } = require("sequelize");
 
 const {
@@ -259,9 +260,18 @@ exports.generateCertificate = async (req, res) => {
         ...userData,
       };
 
-      const htmlContent = wrapEmailTemplate(
-        cleanHtml(replacePlaceholders(emailBody, replacements)),
-      );
+      // Library-template bodies are sent as-is; the certificate's own
+      // placeholders ({{recipientName}}, {{date}}, {{certificateId}}) are
+      // filled either way.
+      const htmlContent =
+        renderIfTemplate(emailBody, {
+          name: userData.name,
+          email: userEmail,
+          values: replacements,
+        }) ??
+        wrapEmailTemplate(
+          cleanHtml(replacePlaceholders(emailBody, replacements)),
+        );
 
       await sendGraphEmail({
         to: userEmail,
@@ -433,14 +443,15 @@ exports.bulkGenerateCertificates = async (req, res) => {
             ...userData,
           };
 
-          // Only placeholder replacement happens per guest
-          const personalizedBody = replacePlaceholders(
-            cleanedEmailBody,
-            replacements,
-          );
-
-          // Wrap final HTML
-          const htmlContent = wrapEmailTemplate(personalizedBody);
+          // Library-template bodies are sent as-is; otherwise only
+          // placeholder replacement happens per guest, then the wrapper.
+          const htmlContent =
+            renderIfTemplate(template.emailBody, {
+              name: userData.name,
+              email: userEmail,
+              values: replacements,
+            }) ??
+            wrapEmailTemplate(replacePlaceholders(cleanedEmailBody, replacements));
 
           sendGraphEmail({
             to: userEmail,
@@ -867,9 +878,15 @@ exports.sendCertificateTestEmail = async (req, res) => {
       name: "Test User",
     };
 
-    const htmlContent = wrapEmailTemplate(
-      cleanHtml(replacePlaceholders(emailBody, replacements)),
-    );
+    const htmlContent =
+      renderIfTemplate(emailBody, {
+        name: "Test User",
+        email,
+        values: { ...replacements, date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), certificateId: "PSCERT-TEST" },
+      }) ??
+      wrapEmailTemplate(
+        cleanHtml(replacePlaceholders(emailBody, replacements)),
+      );
 
     // Send the email
     await sendGraphEmail({

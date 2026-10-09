@@ -51,6 +51,7 @@ const courseTagsRoutes = require("./routes/courseRoutes/tagRoutes");
 const integrationRoutes = require("./routes/integrationRoutes");
 const externalLeadRoutes = require("./routes/externalLeadRoutes");
 const campaignRoutes = require("./routes/campaignRoutes");
+const emailLibraryTemplateRoutes = require("./routes/emailLibraryTemplateRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const emailUnSubscribeRoutes = require("./routes/emailUnsubscribeRoute");
 const weebhookRoutes = require("./routes/webhookRoutes");
@@ -136,6 +137,7 @@ app.use('/courses', coursesRoutes)
 app.use('/course-tags', courseTagsRoutes)
 app.use('/integrations', integrationRoutes)
 app.use('/campaigns', campaignRoutes)
+app.use('/email-templates', emailLibraryTemplateRoutes)
 app.use('/contacts', contactRoutes);
 app.use("/unsubscribe" , emailUnSubscribeRoutes)
 app.use("/webhook" , weebhookRoutes)

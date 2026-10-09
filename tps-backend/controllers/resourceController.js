@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const { Resource, ResourceLead, sequelize } = require("../models");
 const { sendGraphEmail } = require("../utils/email/sendGraphEmail");
 const { toSlug } = require("../utils/slugHelpers");
+const { renderIfTemplate } = require("../utils/email/templateHtml");
 
 const replacePlaceholders = (body, replacements) => {
     const withValues = body.replace(/{{(.*?)}}/g, (_, key) => {
@@ -138,13 +139,20 @@ exports.createLead = async (req, res) => {
         let emailResult = null;
 
         if (resource.emailTemplate) {
-            const htmlContent = wrapEmailTemplate(
-                cleanHtml(
-                    replacePlaceholders(resource.emailTemplate.body, {
-                        name: data.name
-                    })
-                )
-            );
+            // Library-template bodies are sent as-is (utils/email/templateHtml.js).
+            const htmlContent =
+                renderIfTemplate(resource.emailTemplate.body, {
+                    name: data.name,
+                    email: data.email,
+                    phone: data.phone,
+                }) ??
+                wrapEmailTemplate(
+                    cleanHtml(
+                        replacePlaceholders(resource.emailTemplate.body, {
+                            name: data.name
+                        })
+                    )
+                );
             emailResult = await sendGraphEmail({
                 to: data.email,
                 subject: resource.emailTemplate.subject,

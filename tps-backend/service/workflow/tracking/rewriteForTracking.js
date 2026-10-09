@@ -44,7 +44,10 @@ function rewriteForTracking({ html, messageId, leadSourceType, leadSourceId, enr
   const clicksRewritten = html.replace(
     /(<a\b[^>]*\bhref\s*=\s*)("([^"]+)"|'([^']+)')/gi,
     (m, prefix, _q, dq, sq) => {
-      const url = dq || sq;
+      // The attribute text is HTML: a query string's `&` arrives as `&amp;`
+      // (that is how browsers serialise it, and how template fields are
+      // escaped). Decoded here, or the redirect lands on `?a=1&amp;b=2`.
+      const url = (dq || sq || "").replace(/&amp;/gi, "&");
       if (!url || SKIP_PROTOCOLS.test(url)) return m;
       // Only rewrite absolute http(s) — leave relative links and anchors alone.
       if (!/^https?:\/\//i.test(url)) return m;

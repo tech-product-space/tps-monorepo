@@ -14,6 +14,7 @@ const {
   cleanHtml,
   wrapEmailTemplate,
 } = require("../utils/email/htmlHelpers.js");
+const { renderIfTemplate } = require("../utils/email/templateHtml");
 const { capitalizeName } = require("../utils/capitalize.js");
 const { sendGraphEmail } = require("../utils/email/sendGraphEmail");
 
@@ -327,9 +328,11 @@ module.exports = {
         name: recipientName,
       });
 
-      const htmlContent = wrapEmailTemplate(
-        cleanHtml(replacePlaceholders(template.body, { name: recipientName })),
-      );
+      const htmlContent =
+        renderIfTemplate(template.body, { name: recipientName, email }) ??
+        wrapEmailTemplate(
+          cleanHtml(replacePlaceholders(template.body, { name: recipientName })),
+        );
 
       await sendGraphEmail({
         to: email,
@@ -403,11 +406,13 @@ module.exports = {
           name: recipientName,
         });
 
-        const personalizedBody = replacePlaceholders(cleanedBody, {
-          name: recipientName,
-        });
-
-        const htmlContent = wrapEmailTemplate(personalizedBody);
+        const htmlContent =
+          renderIfTemplate(template.body, { name: recipientName, email }) ??
+          wrapEmailTemplate(
+            replacePlaceholders(cleanedBody, {
+              name: recipientName,
+            }),
+          );
 
         await sendGraphEmail({
           to: email,
@@ -427,10 +432,7 @@ module.exports = {
     // If any scheduled agenda job exists for this template, cancel it
     const JOB_NAME = "send-event-email-template";
     
-    await agenda.cancel({
-      name: JOB_NAME,
-      data: { templateId: template.id },
-    });
+    await cancelEventEmailTemplate(template.id);
 
     // Mark as sent
     template.status = EVENT_EMAIL_TEMPLATE_STATUS.SENT;

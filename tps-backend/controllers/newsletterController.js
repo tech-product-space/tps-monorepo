@@ -9,6 +9,7 @@ const {
     wrapEmailTemplateWithUnsubscribe,
     cleanHtml,
 } = require('../utils/email/htmlHelpers');
+const { renderIfTemplate } = require("../utils/email/templateHtml");
 const {
     filterUnsubscribedRecipients,
 } = require('../service/campaign/filterUnsubscribedRecipients');
@@ -171,10 +172,23 @@ exports.remove = async (req, res) => {
 
 // Build the final HTML for one recipient (adds the unsubscribe footer, same
 // convention as campaignScheduler.js).
+//
+// A library-template body is sent as-is instead, with {{unsubscribe_url}}
+// filled — or a footer added if the template has no link of its own.
+// Subscribers have no name on file, so {{name}} reads "there".
 const buildHtmlFor = (email, bodyHtml) => {
-    const cleaned = cleanHtml(bodyHtml);
     const token = generateUnsubscribeToken(email);
     const unsubscribeUrl = `${process.env.FRONTEND_URL}/unsubscribe?token=${token}&type=campaign`;
+
+    const templated = renderIfTemplate(bodyHtml, {
+        name: "there",
+        email,
+        unsubscribeUrl,
+        requireUnsubscribe: true,
+    });
+    if (templated) return templated;
+
+    const cleaned = cleanHtml(bodyHtml);
     return wrapEmailTemplateWithUnsubscribe(cleaned, unsubscribeUrl);
 };
 

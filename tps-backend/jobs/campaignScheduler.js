@@ -16,6 +16,7 @@ const {
   cleanHtml,
   replacePlaceholders,
 } = require("../utils/email/htmlHelpers");
+const { renderTemplateEmail } = require("../utils/email/templateHtml");
 const { capitalizeName } = require("../utils/capitalize");
 const {
   buildRecipients,
@@ -111,7 +112,11 @@ agenda.define("send-campaign", async (job) => {
        SEND EMAILS IN BATCHES
     -------------------------------- */
 
-    const cleanedBody = cleanHtml(campaign.content);
+    // A template-mode body is a full document and must reach the recipient
+    // untouched — see utils/email/templateHtml.js. Only the editor fragment
+    // goes through cleanHtml and the wrapper.
+    const isTemplate = campaign.content_mode === "template";
+    const cleanedBody = isTemplate ? campaign.content : cleanHtml(campaign.content);
     let batchNumber = 0;
     let totalSent = 0;
     let totalFailed = 0;
@@ -159,22 +164,38 @@ agenda.define("send-campaign", async (job) => {
             name: recipientName,
           });
 
-          const personalizedBody = replacePlaceholders(cleanedBody, {
-            name: recipientName,
-          });
-
           const token = generateUnsubscribeToken(recipient.email, campaign.id);
 
           const unsubscribeUrl = `${process.env.FRONTEND_URL}/unsubscribe?token=${token}&type=campaign`;
 
+          const isGradientSender =
+            campaign.sender_email === "info@thegradient.co.in" ||
+            campaign.sender_email === "noreply@gradientlearnings.org";
+
           let htmlContent;
 
-          if (
-            campaign.sender_email === "info@thegradient.co.in" ||
-            campaign.sender_email === "noreply@gradientlearnings.org"
-          ) {
+          if (isTemplate) {
+            // Same rule as the wrappers below: Gradient senders have never
+            // carried an unsubscribe footer, everyone else does.
+            htmlContent = renderTemplateEmail({
+              html: cleanedBody,
+              recipient: {
+                name: recipientName,
+                email: recipient.email,
+                phone: recipient.phone,
+              },
+              unsubscribeUrl,
+              requireUnsubscribe: !isGradientSender,
+            });
+          } else if (isGradientSender) {
+            const personalizedBody = replacePlaceholders(cleanedBody, {
+              name: recipientName,
+            });
             htmlContent = wrapEmailTemplate(personalizedBody);
           } else {
+            const personalizedBody = replacePlaceholders(cleanedBody, {
+              name: recipientName,
+            });
             htmlContent = wrapEmailTemplateWithUnsubscribe(
               personalizedBody,
               unsubscribeUrl,

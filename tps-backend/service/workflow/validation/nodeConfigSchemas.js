@@ -4,6 +4,7 @@ const {
   NODE_TYPE,
   DURATION_UNIT,
 } = require("../../../constants/workflow");
+const { templateFieldKeys } = require("../../../utils/email/templateHtml");
 
 const REQUIRED_FIELDS = {
   // Phase 2: inline subject + html_body on node config (no template service yet)
@@ -74,6 +75,14 @@ function validateNodeConfig(node) {
   if (node.type === NODE_TYPE.ACTION_SEND_EMAIL) {
     if (typeof cfg.from_email !== "string" || !cfg.from_email.includes("@")) {
       return `from_email must be a valid email address`;
+    }
+    // An unfilled template field would reach every enrolled lead as an empty
+    // heading or a button to nowhere.
+    if (cfg.body_mode === "template") {
+      const unfilled = templateFieldKeys(cfg.html_body);
+      if (unfilled.length) {
+        return `fill in the template fields: ${unfilled.join(", ")}`;
+      }
     }
   }
 

@@ -13,6 +13,7 @@ const {
   cleanHtml,
   replacePlaceholders,
 } = require("../utils/email/htmlHelpers");
+const { renderIfTemplate } = require("../utils/email/templateHtml");
 const { sendGraphEmail } = require("../utils/email/sendGraphEmail");
 
 /* ------------------------------------------
@@ -99,11 +100,14 @@ agenda.define(JOB_NAME, async (job) => {
           name: recipientName,
         });
 
-        const personalizedBody = replacePlaceholders(cleanedBody, {
-          name: recipientName,
-        });
-
-        const htmlContent = wrapEmailTemplate(personalizedBody);
+        // Library-template bodies are sent as-is (utils/email/templateHtml.js).
+        const htmlContent =
+          renderIfTemplate(template.body, { name: recipientName, email }) ??
+          wrapEmailTemplate(
+            replacePlaceholders(cleanedBody, {
+              name: recipientName,
+            }),
+          );
 
         // Step 3: Send email
         await sendGraphEmail({

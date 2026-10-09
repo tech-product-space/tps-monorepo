@@ -36,6 +36,19 @@ module.exports = (sequelize, DataTypes) => {
 
       content: DataTypes.TEXT,
 
+      // 'editor' — a rich-text fragment, sent inside the default wrapper.
+      // 'template' — a full document copied from a library template, sent
+      // as-is. See utils/email/templateHtml.js.
+      content_mode: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: "editor",
+      },
+
+      // Where a template-mode body came from. Provenance only — the html was
+      // copied, so the template can change without touching this campaign.
+      template_id: DataTypes.STRING,
+
       recipient_filters: {
         type: DataTypes.JSONB,
       },
