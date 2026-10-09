@@ -40,6 +40,7 @@ const {
   cleanHtml,
   wrapEmailTemplate,
 } = require("../../utils/email/htmlHelpers");
+const { renderTemplateEmail } = require("../../utils/email/templateHtml");
 const {
   canEnrollLead,
 } = require("../../service/workflow/compliance/enrollmentCap");
@@ -603,7 +604,7 @@ exports.archiveWorkflow = async (req, res) => {
  */
 exports.sendTestEmail = async (req, res) => {
   try {
-    const { subject, html_body, from_email, from_name, to_email, workflow_id, workflow_name } =
+    const { subject, html_body, body_mode, from_email, from_name, to_email, workflow_id, workflow_name } =
       req.body || {};
 
     if (typeof subject !== "string" || !subject.trim()) {
@@ -642,9 +643,17 @@ exports.sendTestEmail = async (req, res) => {
     // Convert authored newlines to <br> (same as the campaign pipeline and the
     // real workflow send path in emailDispatcher) so the test email matches what
     // the lead actually receives — and matches what the editor shows.
-    const renderedHtml = wrapEmailTemplate(
-      cleanHtml(interpolate(html_body, scope) || "").replace(/\n/g, "<br>")
-    );
+    // A template-mode body is a full document: filled and sent as-is, with no
+    // cleanup and no wrapper (utils/email/templateHtml.js).
+    const renderedHtml =
+      body_mode === "template"
+        ? renderTemplateEmail({
+            html: html_body,
+            recipient: { name: scope.name, email: scope.email, phone: scope.phone },
+          })
+        : wrapEmailTemplate(
+            cleanHtml(interpolate(html_body, scope) || "").replace(/\n/g, "<br>")
+          );
 
     const result = await sendEmail({
       to: to_email,

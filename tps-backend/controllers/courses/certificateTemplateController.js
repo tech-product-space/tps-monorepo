@@ -1,5 +1,6 @@
 const { Course, CourseCertificateTemplate } = require("../../models");
 const { wrapEmailTemplate, cleanHtml, replacePlaceholders } = require("../../utils/email/htmlHelpers");
+const { renderIfTemplate } = require("../../utils/email/templateHtml");
 const { sendGraphEmail } = require("../../utils/email/sendGraphEmail");
 
 module.exports = {
@@ -208,9 +209,15 @@ module.exports = {
       name: "Test User",
     };
 
-    const htmlContent = wrapEmailTemplate(
-      cleanHtml(replacePlaceholders(emailBody, replacements)),
-    );
+    const htmlContent =
+      renderIfTemplate(emailBody, {
+        name: "Test User",
+        email,
+        values: { ...replacements, date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), certificateId: "PSCERT-TEST" },
+      }) ??
+      wrapEmailTemplate(
+        cleanHtml(replacePlaceholders(emailBody, replacements)),
+      );
 
     // Send the email
     await sendGraphEmail({

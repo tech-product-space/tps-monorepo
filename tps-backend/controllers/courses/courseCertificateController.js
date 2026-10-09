@@ -12,6 +12,7 @@ const {
   cleanHtml,
   replacePlaceholders,
 } = require("../../utils/email/htmlHelpers");
+const { renderIfTemplate } = require("../../utils/email/templateHtml");
 const { sendGraphEmail } = require("../../utils/email/sendGraphEmail");
 const {
   generateCertificateImage,
@@ -139,9 +140,17 @@ module.exports = {
         ...userData,
       };
 
-      const htmlContent = wrapEmailTemplate(
-        cleanHtml(replacePlaceholders(emailBody, replacements)),
-      );
+      // Library-template bodies are sent as-is; the certificate's own
+      // placeholders are filled either way.
+      const htmlContent =
+        renderIfTemplate(emailBody, {
+          name: userData.name,
+          email: userEmail,
+          values: replacements,
+        }) ??
+        wrapEmailTemplate(
+          cleanHtml(replacePlaceholders(emailBody, replacements)),
+        );
 
       sendGraphEmail({
         to: userEmail,

@@ -4,6 +4,7 @@ const {
   cleanHtml,
   replacePlaceholders,
 } = require("../../utils/email/htmlHelpers");
+const { renderIfTemplate } = require("../../utils/email/templateHtml");
 const {
   sendEmailWithCalendarInviteStaging,
 } = require("../../utils/email/sendCalendarEmail");
@@ -48,13 +49,17 @@ exports.triggerEventCreatedEmail = async ({ userId, eventId, guestType, userType
     throw new Error("No user found with provided ID");
   }
 
-  const htmlContent = wrapEmailTemplate(
-    cleanHtml(
-      replacePlaceholders(template.body, {
-        name: user.name,
-      })
-    )
-  );
+  // A library-template body is a full document, sent as-is; anything else
+  // is an editor fragment and keeps the clean → fill → wrap path.
+  const htmlContent =
+    renderIfTemplate(template.body, { name: user.name, email: user.email }) ??
+    wrapEmailTemplate(
+      cleanHtml(
+        replacePlaceholders(template.body, {
+          name: user.name,
+        })
+      )
+    );
 
   if (type === "Pending") {
     await sendGraphEmail({

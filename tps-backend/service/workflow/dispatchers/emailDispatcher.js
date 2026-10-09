@@ -10,6 +10,7 @@ const {
   wrapEmailTemplate,
   wrapEmailTemplateWithUnsubscribe,
 } = require("../../../utils/email/htmlHelpers");
+const { renderTemplateEmail } = require("../../../utils/email/templateHtml");
 
 /**
  * Dispatch an email for a workflow node. Wraps the existing service/mail/sendEmail
@@ -32,6 +33,8 @@ async function dispatchEmail({
   to,
   subject,
   html,
+  bodyMode = "editor",
+  recipient = {},
   from,
   fromName,
   leadSourceType,
@@ -55,55 +58,96 @@ async function dispatchEmail({
   // Correlation id used for tracking pixel/link token + SES Tags / Graph headers.
   const messageId = uuidv4();
 
-  // Normalize the authored HTML the same way the campaign pipeline does
-  // (strips broken white-space/p tags, normalizes font-family) so workflow
-  // emails render consistently with campaigns.
-  const safeCleanHtml = (raw) => {
-    try {
-      return cleanHtml(raw || "");
-    } catch (_) {
-      return raw || "";
-    }
-  };
-  // Convert authored newlines to <br>, exactly like the campaign pipeline does
-  // via replacePlaceholders. Without this, the line breaks / paragraph spacing
-  // the user sees in the editor (which renders newlines via white-space:pre-wrap)
-  // collapse in the delivered email — because cleanHtml strips white-space:pre-wrap
-  // and HTML otherwise collapses runs of whitespace.
-  const cleanedHtml = safeCleanHtml(html).replace(/\n/g, "<br>");
-
-  // Tracking runs on the authored content only — that keeps the wrapper's
-  // unsubscribe link off the click-tracker and prevents an "engagement" event
-  // every time someone clicks Unsubscribe.
-  let trackedInner = cleanedHtml;
-  let unsubscribeUrl = null;
-  try {
-    const rewriteResult = rewriteForTracking({
-      html: cleanedHtml,
-      messageId,
-      leadSourceType,
-      leadSourceId,
-      enrollmentId,
-      nodeRunId,
-    });
-    trackedInner = rewriteResult.html;
-
+  const unsubscribeUrlFor = () => {
     const tok = mintUnsubscribeToken({ leadSourceType, leadSourceId, messageId });
     const base = (process.env.PUBLIC_TRACKING_BASE_URL || "").replace(/\/$/, "");
-    if (base && tok) {
-      unsubscribeUrl = `${base}/api/v1/u/${tok}`;
-    }
-  } catch (err) {
-    // Tracking rewrite is best-effort — fall back to original html if anything blows up.
-    console.error("rewriteForTracking failed:", err.message);
-  }
+    return base && tok ? `${base}/api/v1/u/${tok}` : null;
+  };
 
-  // Wrap with the shared product space email template (gray bg, white card,
-  // branded footer) — same wrapper used by campaignScheduler.js. Falls back
-  // to the no-unsubscribe variant if PUBLIC_TRACKING_BASE_URL isn't set.
-  const trackedHtml = unsubscribeUrl
-    ? wrapEmailTemplateWithUnsubscribe(trackedInner, unsubscribeUrl)
-    : wrapEmailTemplate(trackedInner);
+  let trackedHtml;
+  let unsubscribeUrl = null;
+
+  if (bodyMode === "template") {
+    // A full document, sent as-is — no cleanHtml, no <br> conversion, no
+    // wrapper. Tracking runs inside renderTemplateEmail while
+    // {{unsubscribe_url}} is still literal, so that link is never tracked.
+    try {
+      unsubscribeUrl = unsubscribeUrlFor();
+    } catch (err) {
+      console.error("mintUnsubscribeToken failed:", err.message);
+    }
+
+    trackedHtml = renderTemplateEmail({
+      html,
+      recipient: { ...recipient, email: recipient.email || to },
+      unsubscribeUrl,
+      requireUnsubscribe: true,
+      trackLinks: (doc) => {
+        try {
+          return rewriteForTracking({
+            html: doc,
+            messageId,
+            leadSourceType,
+            leadSourceId,
+            enrollmentId,
+            nodeRunId,
+          }).html;
+        } catch (err) {
+          console.error("rewriteForTracking failed:", err.message);
+          return doc;
+        }
+      },
+    });
+  } else {
+    // Normalize the authored HTML the same way the campaign pipeline does
+    // (strips broken white-space/p tags, normalizes font-family) so workflow
+    // emails render consistently with campaigns.
+    const safeCleanHtml = (raw) => {
+      try {
+        return cleanHtml(raw || "");
+      } catch (_) {
+        return raw || "";
+      }
+    };
+    // Convert authored newlines to <br>, exactly like the campaign pipeline does
+    // via replacePlaceholders. Without this, the line breaks / paragraph spacing
+    // the user sees in the editor (which renders newlines via white-space:pre-wrap)
+    // collapse in the delivered email — because cleanHtml strips white-space:pre-wrap
+    // and HTML otherwise collapses runs of whitespace.
+    const cleanedHtml = safeCleanHtml(html).replace(/\n/g, "<br>");
+
+    // Tracking runs on the authored content only — that keeps the wrapper's
+    // unsubscribe link off the click-tracker and prevents an "engagement" event
+    // every time someone clicks Unsubscribe.
+    let trackedInner = cleanedHtml;
+    try {
+      const rewriteResult = rewriteForTracking({
+        html: cleanedHtml,
+        messageId,
+        leadSourceType,
+        leadSourceId,
+        enrollmentId,
+        nodeRunId,
+      });
+      trackedInner = rewriteResult.html;
+
+      const tok = mintUnsubscribeToken({ leadSourceType, leadSourceId, messageId });
+      const base = (process.env.PUBLIC_TRACKING_BASE_URL || "").replace(/\/$/, "");
+      if (base && tok) {
+        unsubscribeUrl = `${base}/api/v1/u/${tok}`;
+      }
+    } catch (err) {
+      // Tracking rewrite is best-effort — fall back to original html if anything blows up.
+      console.error("rewriteForTracking failed:", err.message);
+    }
+
+    // Wrap with the shared product space email template (gray bg, white card,
+    // branded footer) — same wrapper used by campaignScheduler.js. Falls back
+    // to the no-unsubscribe variant if PUBLIC_TRACKING_BASE_URL isn't set.
+    trackedHtml = unsubscribeUrl
+      ? wrapEmailTemplateWithUnsubscribe(trackedInner, unsubscribeUrl)
+      : wrapEmailTemplate(trackedInner);
+  }
 
   const headers = [];
   if (unsubscribeUrl) {

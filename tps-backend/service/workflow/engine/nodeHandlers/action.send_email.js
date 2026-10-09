@@ -17,12 +17,21 @@ const { LEAD_EVENT_TYPE } = require("../../../../constants/workflow");
 exports.execute = async ({ enrollment, node, workflow, nodeRun, tx }) => {
   const scope = buildScope(enrollment);
   const subject = interpolate(node.config.subject, scope);
-  const html = interpolate(node.config.html_body, scope);
+
+  // A template-mode body is filled inside the dispatcher instead: `interpolate`
+  // neither escapes values nor knows {{unsubscribe_url}}, and would blank the
+  // latter before the dispatcher could fill it.
+  const isTemplate = node.config.body_mode === "template";
+  const html = isTemplate
+    ? node.config.html_body
+    : interpolate(node.config.html_body, scope);
 
   const result = await dispatchEmail({
     to: enrollment.lead_email_snapshot,
     subject,
     html,
+    bodyMode: isTemplate ? "template" : "editor",
+    recipient: { name: scope.name, email: scope.email, phone: scope.phone },
     from: node.config.from_email,
     fromName: node.config.from_name,
     leadSourceType: enrollment.lead_source_type,

@@ -3,6 +3,7 @@ const { Op } = require("sequelize");
 const { sendGraphEmail } = require("../utils/email/sendGraphEmail");
 const { sendEmailWithCalendarInvite, sendEmailWithCalendarInviteStaging } = require("../utils/email/sendCalendarEmail");
 const templateMap = require("../utils/templates/notificationTemplates");
+const { renderIfTemplate } = require("../utils/email/templateHtml");
 
 function generateReferralCode(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -199,13 +200,16 @@ exports.sendTestNotification = async (req, res) => {
 
     for (const user of foundUsers) {
       // replace placeholders in template body
-      const htmlContent = wrapEmailTemplate(
-        cleanHtml(
-          replacePlaceholders(template.body, {
-            name: user.name
-          })
-        )
-      );
+      // Library-template bodies are sent as-is (utils/email/templateHtml.js).
+      const htmlContent =
+        renderIfTemplate(template.body, { name: user.name, email: user.email }) ??
+        wrapEmailTemplate(
+          cleanHtml(
+            replacePlaceholders(template.body, {
+              name: user.name
+            })
+          )
+        );
 
       if (type === "Pending" || type === "Declined") {
         await sendGraphEmail({

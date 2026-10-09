@@ -1,5 +1,6 @@
 const { ProgramOffer } = require("../models");
 const { sendGraphEmailSecondary } = require('../utils/email/sendGraphEmailSecondary');
+const { renderIfTemplate } = require("../utils/email/templateHtml");
 
 const replacePlaceholders = (body, replacements) => {
     const withValues = body.replace(/{{(.*?)}}/g, (_, key) => {
@@ -241,12 +242,19 @@ exports.sendCurriculumEmail = async (req, res) => {
             return res.status(400).json({ error: `${field} template incomplete` });
         }
 
-        // Replace placeholders like {{name}}
-        const htmlContent = wrapEmailTemplate(
-            cleanHtml(
-                replacePlaceholders(body, { name: userName || "Student" })
-            )
-        );
+        // A library-template body is sent as-is, with {{pdf_url}} available
+        // for the curriculum link. Otherwise: replace {{name}}, clean, wrap.
+        const htmlContent =
+            renderIfTemplate(body, {
+                name: userName || "Student",
+                email: userEmail,
+                values: { pdf_url: programOffer[field].pdfUrl || "" },
+            }) ??
+            wrapEmailTemplate(
+                cleanHtml(
+                    replacePlaceholders(body, { name: userName || "Student" })
+                )
+            );
 
         // Send email
         await sendGraphEmailSecondary({
