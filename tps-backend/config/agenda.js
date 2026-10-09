@@ -9,7 +9,12 @@ const { sendAdminAlert } = require("../service/mail/mailservice");
 // Development gets its own table, as it had its own Mongo collection: local
 // dev connects to the same database (via SSH tunnel) and must not pick up
 // production jobs.
-const isDev = process.env.NODE_ENV === "development";
+//
+// AGENDA_ENV overrides NODE_ENV for this choice alone. A local .env may run
+// NODE_ENV=production against the production database; without the override
+// its jobs land in the production table, where the deployed server can claim
+// them and run its own (older) code instead of the code being tested here.
+const isDev = (process.env.AGENDA_ENV || process.env.NODE_ENV) === "development";
 const schema = process.env.DB_SCHEMA || "tps";
 
 const agenda = new Agenda({
