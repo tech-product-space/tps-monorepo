@@ -146,6 +146,9 @@ const inviteUser = async (req, res) => {
   try {
     const { name, email, role } = req.body;
 
+    // Superadmins are never created from the panel; only admin-level roles.
+    if (role === "superadmin") return res.status(400).json({ error: "Invalid role" });
+
     const existingUser = await company.findOne({ where: { email } });
     if (existingUser) return res.status(400).json({ error: "Email already exists" });
 
@@ -185,6 +188,9 @@ const setPassword = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     user.password = hashedPassword;
+    // Single use: a link that still worked afterwards would let anyone holding
+    // an old invite email reset this account's password.
+    user.inviteToken = null;
     await user.save();
 
     res.status(200).json({ message: "Password set successfully. You can now log in." });
@@ -217,7 +223,10 @@ const updateUser = async (req, res) => {
     const { name, email, role } = req.body;
 
     const user = await company.findByPk(id);
-    if (!user) return res.status(404).json({ error: "User not found" });
+    // Superadmin accounts are hidden from the panel's user list, and cannot be
+    // edited through it either.
+    if (!user || user.role === "superadmin") return res.status(404).json({ error: "User not found" });
+    if (role === "superadmin") return res.status(400).json({ error: "Invalid role" });
 
     // Optional: check if email is being changed and already exists
     if (email && email !== user.email) {
@@ -243,7 +252,7 @@ const deleteUser = async (req, res) => {
     const { id } = req.params;
 
     const user = await company.findByPk(id);
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user || user.role === "superadmin") return res.status(404).json({ error: "User not found" });
 
     await user.destroy();
 
