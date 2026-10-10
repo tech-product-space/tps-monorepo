@@ -22,6 +22,7 @@
     "pg:generate:seeder": "sequelize-cli seed:generate --name",
     "pg:migrate": "sequelize-cli db:migrate",
     "pg:undo": "sequelize-cli db:migrate:undo",
+    "cal:sync": "node src/scripts/backfillCalBookings.js",
     "pg:seed": "sequelize-cli db:seed --seed",
     "pg:seed:all": "sequelize-cli db:seed:all",
     "pg:seed:generate": "sequelize-cli seed:generate --name",
