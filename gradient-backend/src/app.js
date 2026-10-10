@@ -32,6 +32,8 @@ import campaignRoutes from "./routes/campaign/campaign.routes.js"
 import contactRoutes from "./routes/contact/contact.route.js"
 import metaRoutes from "./routes/meta/meta.route.js";
 import emailLogRoutes from "./routes/emailLog/emailLog.routes.js";
+import bookingRoutes from "./routes/booking/booking.routes.js";
+import webhookRoutes from "./routes/webhook/webhook.routes.js";
 
 import { activityLogger } from "./middlewares/activityLog.middleware.js";
 
@@ -93,6 +95,8 @@ app.use("/lead-events", leadEventRoutes);
 app.use("/meta", metaRoutes);
 app.use("/workflows", workflowRoutes);
 app.use("/email-logs", emailLogRoutes);
+app.use("/booking", bookingRoutes);
+app.use("/webhook", webhookRoutes);
 
 // Root route — "v2" marks the new-account deployment, so a request to / shows
 // which server a domain currently resolves to.

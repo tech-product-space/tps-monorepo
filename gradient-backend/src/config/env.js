@@ -20,6 +20,10 @@ export default {
     }
   },
 
+  cal: {
+    webhookSecret: process.env.CAL_WEBHOOK_SECRET,
+  },
+
   crm: {
     /**
      * Base URL of the shared Product Space CRM.
