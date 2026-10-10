@@ -1,3 +1,4 @@
+import express from "express";
 import { listBookings, syncBookings } from "../../controllers/cal/cal.controller.js";
 import { adminAuth } from "../../middlewares/adminAuth.middleware.js";
 
