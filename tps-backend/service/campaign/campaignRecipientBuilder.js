@@ -6,6 +6,7 @@ const {
   resolveRecordingLeads,
 } = require("./resolver/recordingLeadResolver");
 const { resolveContactLeads } = require("./resolver/contactLeadsResolver");
+const { resolveFreeCourseLeads } = require("./resolver/freeCourseLeadResolver");
 
 function isValidEmail(email) {
   return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -15,6 +16,10 @@ async function buildRecipients(filters) {
   let leads = [];
 
   for (const source of filters.sources) {
+    if (source.type === "free_courses") {
+      leads.push(...await resolveFreeCourseLeads(source.filters));
+    }
+
     if (source.type === "platform_leads") {
       const platformLeads = await resolvePlatformLeads(source.filters);
       leads.push(...platformLeads);
