@@ -14,6 +14,7 @@ const {
   COURSE_LESSON_STATUS,
 } = require("../../constants/course");
 const { getPaginationParams, getMeta } = require("../../utils/pagination");
+const { postLead } = require("../../service/crm/crmService");
 
 module.exports = {
   // POST /courses/slug/:slug/enroll
@@ -30,13 +31,13 @@ module.exports = {
       where: { slug },
     });
 
-    const courseId = course.id;
-
     if (!course) {
       return res
         .status(404)
         .json({ message: "Course not found or not published" });
     }
+
+    const courseId = course.id;
 
     // 2. Prevent duplicate enrollment
     const existing = await CourseEnrollment.findOne({
@@ -58,6 +59,41 @@ module.exports = {
       phone,
       form_data: form_data || {},
     });
+
+    // Match resource-download leads, using the enrolled course as the resource.
+    // Keep the saved enrollment usable even if CRM is temporarily unavailable.
+    try {
+      const details = enrollment.form_data || {};
+      const user = details.email
+        ? null
+        : await users.findByPk(user_id, { attributes: ["email"] });
+
+      await postLead({
+        product_id: "Resources",
+        external_source: "Product Space Website",
+        name: enrollment.name,
+        email: details.email || user?.email || "",
+        phone: enrollment.phone,
+        country_code: details.country_code,
+        utm_id: details.utm_id ?? "",
+        utm_source: details.utm_source ?? "",
+        utm_medium: details.utm_medium ?? "",
+        utm_campaign: details.utm_campaign ?? "",
+        utm_content: details.utm_content ?? "",
+        extra_fields: {
+          resourceName: course.title,
+          resourceJobTitle: details.professionalRole || details.profession || "",
+        },
+        additional_data: {
+          ...details,
+          course_id: courseId,
+          enrollment_id: enrollment.id,
+          visitor_id: details.visitorId || null,
+        },
+      });
+    } catch (error) {
+      console.error("Course enrollment CRM sync failed:", enrollment.id, error.message);
+    }
 
     // 4. Find first lesson
     const firstModule = await CourseModule.findOne({
