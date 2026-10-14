@@ -9,8 +9,28 @@ const {
   EventGuests,
   Resource,
   ResourceLead,
+  Course,
+  CourseEnrollment,
   sequelize,
 } = require("../../models");
+
+exports.getFreeCoursesForCampaign = async (req, res) => {
+  try {
+    const courses = await Course.findAll({
+      attributes: ["id", "title", "createdAt", [Sequelize.fn("COUNT", Sequelize.col("courseEnrollments.id")), "leadCount"]],
+      include: [{ model: CourseEnrollment, as: "courseEnrollments", attributes: [], required: false }],
+      group: ["Course.id"],
+      order: [["createdAt", "DESC"]],
+    });
+    return res.json({ data: courses.map((course) => {
+      const row = course.toJSON();
+      return { ...row, leadCount: Number(row.leadCount) };
+    }) });
+  } catch (error) {
+    console.error("Failed to fetch campaign free courses:", error);
+    return res.status(500).json({ message: "Failed to fetch free courses." });
+  }
+};
 
 const {
   buildRecipients,

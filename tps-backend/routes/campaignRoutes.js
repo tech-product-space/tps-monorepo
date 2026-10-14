@@ -8,6 +8,7 @@ router.get("/", campaignController.getCampaigns);
 
 router.get("/events-list", campaignController.getEventsForCampaign);
 router.get("/resource-list", campaignController.getResourcesForCampaign);
+router.get("/free-course-list", campaignController.getFreeCoursesForCampaign);
 
 router.get("/:id/preview", campaignController.previewRecipients);
 router.post("/:id/send-test", campaignController.sendTestMail);
