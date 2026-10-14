@@ -203,17 +203,23 @@ module.exports = {
       });
     }
 
-    // Only replace the name in the email body
+    // Fill the test email with sample certificate details.
     const replacements = {
       recipientName: "Test User",
       name: "Test User",
+      date: new Date().toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      certificateId: "PSCERT-TEST",
     };
 
     const htmlContent =
       renderIfTemplate(emailBody, {
         name: "Test User",
         email,
-        values: { ...replacements, date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), certificateId: "PSCERT-TEST" },
+        values: replacements,
       }) ??
       wrapEmailTemplate(
         cleanHtml(replacePlaceholders(emailBody, replacements)),

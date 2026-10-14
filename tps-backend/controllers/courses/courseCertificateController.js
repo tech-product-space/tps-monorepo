@@ -1,4 +1,7 @@
-const { uploadImageToS3, getSignedS3Url } = require("../../lib/s3");
+const { uploadImageToS3, getSignedS3Url, getS3ObjectMetadata } = require("../../lib/s3");
+// Increment when an older stored image must be rendered again.
+const CURRENT_RENDER_VERSION = 1;
+const CERTIFICATE_METADATA = { "render-version": String(CURRENT_RENDER_VERSION) };
 const {
   Course,
   UserCourseCertificate,
@@ -111,7 +114,7 @@ module.exports = {
     const fileName = `${certificateId}.png`;
     const key = `certificates/free-course/${fileName}`;
 
-    await uploadImageToS3(certificateBuffer, key, "image/png");
+    await uploadImageToS3(certificateBuffer, key, "image/png", CERTIFICATE_METADATA);
 
     // Generate signed URL (optional)
     const certificateUrl = await getSignedS3Url({
@@ -188,7 +191,7 @@ module.exports = {
         user_id: userId,
         course_id: courseId,
       },
-      attributes: ["certificate_id"],
+      attributes: ["certificate_id", "createdAt"],
     });
 
     if (!certificate) {
@@ -201,6 +204,37 @@ module.exports = {
     const fileName = `${certificate.certificate_id}.png`;
     const key = `certificates/free-course/${fileName}`;
 
+    const metadata = await getS3ObjectMetadata(key);
+    const storedVersion = Number(metadata?.["render-version"]);
+    if (!Number.isInteger(storedVersion) || storedVersion < CURRENT_RENDER_VERSION) {
+      // Repair legacy images once, preserving the issued identity/date.
+      const template = await CourseCertificateTemplate.findOne({ where: { courseId } });
+      if (!template) {
+        return res.status(404).json({ success: false, error: "Certificate template not found for this course" });
+      }
+      const enrollment = await CourseEnrollment.findOne({
+        where: { user_id: userId, course_id: courseId },
+        include: [{ model: users, as: "user", attributes: ["name"] }],
+      });
+      const name = capitalizeName(enrollment?.name) || capitalizeName(enrollment?.user?.name);
+      if (!name) {
+        return res.status(400).json({ success: false, error: "Certificate recipient name is missing" });
+      }
+      const issuedAt = new Date(certificate.createdAt);
+      if (!certificate.createdAt || Number.isNaN(issuedAt.getTime())) {
+        return res.status(400).json({ success: false, error: "Certificate issue date is missing" });
+      }
+      const certificateBuffer = await generateCertificateImage(template, {
+        name,
+        certificateId: certificate.certificate_id,
+        date: issuedAt.toLocaleDateString("en-US", {
+          year: "numeric", month: "long", day: "numeric",
+        }),
+      });
+      // The version and PNG are written together; failed uploads remain retryable.
+      await uploadImageToS3(certificateBuffer, key, "image/png", CERTIFICATE_METADATA);
+    }
+
     // Generate signed URL
     const certificateUrl = await getSignedS3Url({
       key,
@@ -208,8 +242,10 @@ module.exports = {
       filename: fileName,
       contentType: "image/png",
       expiresIn: 60 * 60, // 1 hour
+      cacheControl: "no-store",
     });
 
+    res.set("Cache-Control", "no-store");
     return res.status(200).json({
       success: true,
       certificateUrl,

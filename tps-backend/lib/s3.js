@@ -1,5 +1,5 @@
 // lib/uploadToS3.js
-const { PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { PutObjectCommand, GetObjectCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const s3 = require("../config/aws");
 
@@ -20,18 +20,30 @@ async function uploadPDFToS3(buffer, key) {
   }
 }
 
-async function uploadImageToS3(buffer, key, contentType = "image/png") {
+async function uploadImageToS3(buffer, key, contentType = "image/png", metadata) {
   try {    
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
       Body: buffer,
       ContentType: contentType,
+      ...(metadata ? { Metadata: metadata } : {}),
     }));
     return { bucket: BUCKET, key };
   } catch (error) {
     console.error("S3 Upload Error:", error);
     throw new Error("Upload to S3 failed");
+  }
+}
+
+async function getS3ObjectMetadata(key) {
+  try {
+    const result = await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
+    return result.Metadata || {};
+  } catch (error) {
+    // Only a missing object is repairable; permission/network errors must surface.
+    if (error.$metadata?.httpStatusCode === 404 || error.name === "NotFound") return null;
+    throw error;
   }
 }
 
@@ -53,6 +65,7 @@ async function getSignedS3Url({
   filename,
   contentType = "image/png",
   expiresIn = 60 * 60,
+  cacheControl,
 }) {
   if (!bucket) throw new Error("Missing S3 bucket (env AWS_S3_BUCKET or pass bucket)");
   if (!key) throw new Error("Missing S3 object key");
@@ -62,10 +75,11 @@ async function getSignedS3Url({
     Key: key,
     ResponseContentType: contentType,
     ResponseContentDisposition: `${disposition}; filename="${filename}"`,
+    ...(cacheControl ? { ResponseCacheControl: cacheControl } : {}),
   });
 
   return getSignedUrl(s3, cmd, { expiresIn });
 }
 
 
-module.exports = { uploadPDFToS3, uploadImageToS3, getSignedS3Url };
+module.exports = { uploadPDFToS3, uploadImageToS3, getSignedS3Url, getS3ObjectMetadata };
