@@ -1,7 +1,9 @@
 const { createCanvas, loadImage } = require("canvas");
+const { initCertificateFonts, certificateFont } = require("./certificateFonts");
 
 const generateCertificateImage = async (templateConfig, userData) => {  
   const { templateImage, imageSize, fields } = templateConfig;
+  initCertificateFonts();
   
   // Create canvas with template image dimensions
   const canvas = createCanvas(imageSize.width, imageSize.height);
@@ -33,7 +35,7 @@ const generateCertificateImage = async (templateConfig, userData) => {
     const x = (field.x / 100) * imageSize.width;
     const y = (field.y / 100) * imageSize.height;
     
-    ctx.font = `bold ${field.fontSize}px ${field.fontFamily}`;
+    ctx.font = certificateFont(field.fontFamily, field.fontSize);
     ctx.fillStyle = field.color;
     ctx.textAlign = field.alignment || 'center';
     ctx.textBaseline = 'middle';
