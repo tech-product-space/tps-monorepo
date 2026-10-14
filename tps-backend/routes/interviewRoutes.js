@@ -36,4 +36,24 @@ router.delete('/questions/:questionId/answers/:answerId/feedback/:feedbackId', i
 router.put("/questions/:questionId/answers/:answerId/feedback/:feedbackId/admin",interviewController.editFeedbackAdmin);
 router.delete("/questions/:questionId/answers/:answerId/feedback/:feedbackId/admin", interviewController.deleteFeedbackAdmin);
 
+// reports ("I got this question")
+router.post('/questions/:questionId/reports', interviewController.submitReport);
+router.get('/admin/interview-reports', interviewController.listReportsAdmin);
+router.put('/admin/interview-reports/:id', interviewController.updateReportAdmin);
+
+// drafts
+router.get('/questions/:questionId/draft', interviewController.getDraft);
+router.put('/questions/:questionId/draft', interviewController.saveDraft);
+
+// answer moderation flags
+router.put('/questions/:questionId/answers/:answerId/expert', interviewController.toggleExpertAnswerAdmin);
+router.put('/questions/:questionId/answers/:answerId/pin', interviewController.togglePinnedAnswerAdmin);
+
+// learner submissions & moderation (handover v2)
+router.post('/questions/submit', interviewController.submitLearnerQuestion);
+router.get('/questions/my-submissions', interviewController.getMySubmissions);
+router.get('/questions/suggest-duplicates', interviewController.suggestDuplicates);
+router.get('/admin/question-submissions', interviewController.getAdminSubmissions);
+router.put('/admin/question-submissions/:id/review', interviewController.reviewSubmission);
+
 module.exports = router;

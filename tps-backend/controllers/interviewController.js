@@ -214,7 +214,20 @@ exports.getAllUserQuestions = async (req, res) => {
 
     const userId = req.query.userId ? parseInt(req.query.userId) : null;
     const onlySaved = req.query.onlySaved === "true";
+    const view = req.query.view || (onlySaved ? "saved" : "all");
     const { company, type, role, search } = req.query;
+
+    if (view === "mine") {
+      if (!userId) {
+        return res.json({ success: true, meta: getMeta(0, page, limit), data: [] });
+      }
+      const mySubmissions = await repo.listUserSubmissions(userId);
+      return res.json({
+        success: true,
+        meta: getMeta(mySubmissions.length, 1, Math.max(limit, mySubmissions.length)),
+        data: mySubmissions,
+      });
+    }
 
     const where = ["q.is_published = true"];
     const bind = [];
@@ -224,19 +237,29 @@ exports.getAllUserQuestions = async (req, res) => {
     };
 
     if (company && company !== "all") where.push(`q.company = ${param(company)}`);
-    if (type && type !== "all") where.push(`q.types && ${param(repo.toArray(type))}::text[]`);
-    if (role && role !== "all") where.push(`q.roles && ${param(repo.toArray(role))}::text[]`);
-    if (search && search.trim() !== "") where.push(`q.title ILIKE ${param(likeTerm(search))}`);
+
+    const typeValues = repo.toArray(type).flatMap((t) => String(t).split(",")).map((s) => s.trim()).filter(Boolean);
+    if (typeValues.length > 0 && !typeValues.includes("all")) {
+      where.push(`q.types && ${param(typeValues)}::text[]`);
+    }
+
+    if (role && role !== "all") {
+      where.push(`q.roles && ${param(repo.toArray(role))}::text[]`);
+    }
+
+    if (search && search.trim() !== "") {
+      where.push(`(q.title ILIKE ${param(likeTerm(search))} OR q.company ILIKE ${param(likeTerm(search))})`);
+    }
 
     // Saved flag for this user (false for everyone when no userId).
     const savedExpr = userId
       ? `EXISTS (SELECT 1 FROM saved_questions s WHERE s.question_id = q.id AND s.user_id = ${param(userId)})`
       : "false";
-    if (onlySaved) where.push(savedExpr);
+    if (onlySaved || view === "saved") where.push(savedExpr);
 
     // The userId param is the last one added; the count only references it
     // when filtering to saved questions.
-    const countBind = userId && !onlySaved ? bind.slice(0, -1) : bind.slice();
+    const countBind = userId && !(onlySaved || view === "saved") ? bind.slice(0, -1) : bind.slice();
 
     const whereSql = where.join(" AND ");
     const [{ count }] = await repo.select(
@@ -244,10 +267,18 @@ exports.getAllUserQuestions = async (req, res) => {
       countBind
     );
 
+    const sort = req.query.sort || req.query.sortBy || "recent";
+    let orderSql = "q.created_at DESC, q.id ASC";
+    if (sort === "discussed") {
+      orderSql = "(SELECT count(*) FROM interview_answers a WHERE a.question_id = q.id) DESC, q.created_at DESC";
+    } else if (sort === "reported") {
+      orderSql = "(SELECT count(*) FROM interview_reports r WHERE r.question_id = q.id AND r.status = 'approved') DESC, q.created_at DESC";
+    }
+
     const rows = await repo.select(
       `SELECT q.*, ${savedExpr} AS is_saved FROM interview_questions q
         WHERE ${whereSql}
-        ORDER BY q.created_at DESC, q.id ASC
+        ORDER BY ${orderSql}
         LIMIT ${param(limit)} OFFSET ${param(offset)}`,
       bind
     );
@@ -393,7 +424,7 @@ exports.togglePublishStatus = async (req, res) => {
 exports.addAnswer = async (req, res) => {
   try {
     const { questionId } = req.params;
-    const { userId, email, userName, content } = req.body;
+    const { userId, email, userName, content, isExpert } = req.body;
 
     const user = await company.findOne({ where: { email } });
     const isMember = !!user;
@@ -401,7 +432,15 @@ exports.addAnswer = async (req, res) => {
     const question = await repo.findQuestionRow(questionId);
     if (!question) return res.status(404).json({ error: "Question not found" });
 
-    await repo.insertAnswer(question.id, { userId, userName, isMember, content });
+    const newAnswer = await repo.insertAnswer(question.id, { userId, userName, isMember, content });
+
+    if (isExpert) {
+      await repo.toggleExpertAnswer(newAnswer.id, true);
+    }
+
+    if (userId) {
+      await repo.deleteAnswerDraft(question.id, userId);
+    }
 
     res.status(201).json(await repo.hydrateOne(question));
   } catch (err) {
@@ -873,3 +912,401 @@ exports.getQuestionMetaBySlug = async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// GET /interview/questions/:slug/with-related
+exports.getQuestionWithRelated = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const row = await repo.findQuestionRowBySlug(slug);
+    if (!row) {
+      return res.status(404).json({ error: "Question not found" });
+    }
+
+    const types = row.types || [];
+    const roles = row.roles || [];
+
+    let relatedRows = [];
+    if (types.length || roles.length) {
+      relatedRows = await repo.select(
+        `SELECT * FROM interview_questions
+         WHERE is_published = true AND id <> $1 AND (types && $2 OR roles && $3)
+         ORDER BY created_at DESC LIMIT 4`,
+        [row.id, types, roles]
+      );
+    }
+
+    if (relatedRows.length < 4) {
+      const excludeIds = [row.id, ...relatedRows.map((r) => r.id)];
+      const fillers = await repo.select(
+        `SELECT * FROM interview_questions
+         WHERE is_published = true AND id <> ALL($1)
+         ORDER BY created_at DESC LIMIT $2`,
+        [excludeIds, 4 - relatedRows.length]
+      );
+      relatedRows = [...relatedRows, ...fillers];
+    }
+
+    const hydrated = await repo.hydrate(relatedRows);
+    return res.json(hydrated);
+  } catch (err) {
+    console.error("Error in getQuestionWithRelated:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// POST /interview/questions/:questionId/reports
+exports.submitReport = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const { userId, userName, companyName, roleName, interviewTiming, companyLogo } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Please sign in to submit a report." });
+    }
+    if (!companyName || !companyName.trim()) {
+      return res.status(400).json({ error: "Company name is required." });
+    }
+    if (!roleName || !roleName.trim()) {
+      return res.status(400).json({ error: "Role is required." });
+    }
+    if (!interviewTiming) {
+      return res.status(400).json({ error: "Interview timing is required." });
+    }
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question) {
+      return res.status(404).json({ error: "Question not found" });
+    }
+
+    const report = await repo.insertReport({
+      questionId: question.id,
+      userId,
+      userName: userName || "Learner",
+      companyName,
+      companyLogo,
+      roleName,
+      interviewTiming,
+      status: "pending",
+    });
+
+    return res.status(201).json({
+      message: "Report submitted successfully for review.",
+      report: repo.serializeReport(report),
+    });
+  } catch (err) {
+    console.error("Error submitting interview report:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/questions/:questionId/draft
+exports.getDraft = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const userId = Number(req.query.userId);
+    if (!userId) return res.json({ content: "" });
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question) return res.status(404).json({ error: "Question not found" });
+
+    const draft = await repo.getAnswerDraft(question.id, userId);
+    return res.json(draft || { content: "" });
+  } catch (err) {
+    console.error("Error fetching draft:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/questions/:questionId/draft
+exports.saveDraft = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const { userId, content } = req.body;
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question) return res.status(404).json({ error: "Question not found" });
+
+    const draft = await repo.saveAnswerDraft(question.id, userId, content || "");
+    return res.json({ message: "Draft saved", draft });
+  } catch (err) {
+    console.error("Error saving draft:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/admin/interview-reports
+exports.listReportsAdmin = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const { status, questionId } = req.query;
+
+    const result = await repo.listReports({ page, limit, status, questionId });
+    return res.json(result);
+  } catch (err) {
+    console.error("Error listing reports:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/admin/interview-reports/:id
+exports.updateReportAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, companyName, roleName, reviewedBy } = req.body;
+
+    const updated = await repo.updateReport(id, {
+      status,
+      companyName,
+      roleName,
+      reviewedBy,
+    });
+    if (!updated) return res.status(404).json({ error: "Report not found" });
+
+    return res.json({
+      message: "Report updated successfully",
+      report: repo.serializeReport(updated),
+    });
+  } catch (err) {
+    console.error("Error updating report:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/questions/:questionId/answers/:answerId/expert
+exports.toggleExpertAnswerAdmin = async (req, res) => {
+  try {
+    const { questionId, answerId } = req.params;
+    const { isExpert } = req.body;
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question) return res.status(404).json({ error: "Question not found" });
+    const answer = await repo.findAnswerRow(question.id, answerId);
+    if (!answer) return res.status(404).json({ error: "Answer not found" });
+
+    const updated = await repo.toggleExpertAnswer(answer.id, isExpert);
+    return res.json({
+      message: "Expert status updated",
+      answer: await repo.answerWithFeedback(updated),
+    });
+  } catch (err) {
+    console.error("Error updating expert answer status:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/questions/:questionId/answers/:answerId/pin
+exports.togglePinnedAnswerAdmin = async (req, res) => {
+  try {
+    const { questionId, answerId } = req.params;
+    const { isPinned } = req.body;
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question) return res.status(404).json({ error: "Question not found" });
+    const answer = await repo.findAnswerRow(question.id, answerId);
+    if (!answer) return res.status(404).json({ error: "Answer not found" });
+
+    const updated = await repo.togglePinnedAnswer(answer.id, isPinned);
+    return res.json({
+      message: "Pinned status updated",
+      answer: await repo.answerWithFeedback(updated),
+    });
+  } catch (err) {
+    console.error("Error updating pinned answer status:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /interview/questions/submit
+exports.submitLearnerQuestion = async (req, res) => {
+  try {
+    const {
+      userId,
+      userName,
+      userEmail,
+      title,
+      context,
+      categories,
+      role,
+      customRole,
+      isInterview,
+      company,
+      interviewTiming,
+      notifyOnAnswer,
+    } = req.body;
+
+    if (!title || !title.trim() || title.trim().length < 12) {
+      return res.status(400).json({ error: "Question must be at least 12 characters long" });
+    }
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
+    const submission = await repo.insertLearnerSubmission({
+      userId,
+      userName,
+      userEmail,
+      title: title.trim(),
+      context: context ? context.trim() : "",
+      categories: categories || [],
+      role: role || "",
+      customRole: customRole ? customRole.trim() : "",
+      isInterview: !!isInterview,
+      company: company ? company.trim() : "",
+      interviewTiming: interviewTiming || "",
+      notifyOnAnswer: notifyOnAnswer !== false,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Question submitted for review",
+      submission,
+    });
+  } catch (err) {
+    console.error("Error submitting learner question:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/questions/my-submissions
+exports.getMySubmissions = async (req, res) => {
+  try {
+    const userId = req.query.userId ? parseInt(req.query.userId) : null;
+    if (!userId) {
+      return res.json([]);
+    }
+    const submissions = await repo.listUserSubmissions(userId);
+    res.json(submissions);
+  } catch (err) {
+    console.error("Error fetching user submissions:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/questions/suggest-duplicates
+exports.suggestDuplicates = async (req, res) => {
+  try {
+    const q = req.query.q || req.query.query || "";
+    if (!q || q.trim().length < 3) {
+      return res.json([]);
+    }
+    const matches = await repo.suggestDuplicates(q.trim(), 5);
+    res.json(matches);
+  } catch (err) {
+    console.error("Error suggesting duplicate questions:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/admin/question-submissions
+exports.getAdminSubmissions = async (req, res) => {
+  try {
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const status = req.query.status || "all";
+
+    const { submissions, total } = await repo.listAdminSubmissions({
+      status,
+      limit,
+      offset,
+    });
+
+    res.json({
+      submissions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (err) {
+    console.error("Error fetching admin submissions:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/admin/question-submissions/:id/review
+exports.reviewSubmission = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, rejectionReason, canonicalQuestionId, reviewerId, company, role, categories, title } = req.body;
+
+    const submission = await repo.findSubmissionRow(id);
+    if (!submission) {
+      return res.status(404).json({ error: "Submission not found" });
+    }
+
+    if (action === "reject") {
+      const updated = await repo.updateSubmissionReview(submission.id, {
+        status: "rejected",
+        rejectionReason: rejectionReason || "Does not meet community guidelines",
+        reviewerId: reviewerId || ADMIN_AUTHOR_ID,
+      });
+      return res.json({ success: true, message: "Submission rejected", submission: updated });
+    }
+
+    if (action === "merge") {
+      if (!canonicalQuestionId) {
+        return res.status(400).json({ error: "canonicalQuestionId is required to merge" });
+      }
+      const canonicalQ = await repo.findQuestionRow(canonicalQuestionId);
+      if (!canonicalQ) {
+        return res.status(404).json({ error: "Canonical question not found" });
+      }
+      const updated = await repo.updateSubmissionReview(submission.id, {
+        status: "merged",
+        canonicalQuestionId: canonicalQ.id,
+        reviewerId: reviewerId || ADMIN_AUTHOR_ID,
+      });
+      return res.json({ success: true, message: "Submission merged into canonical question", submission: updated });
+    }
+
+    if (action === "approve") {
+      const approvedTitle = title || submission.title;
+      const approvedSlug = await generateUniqueSlug(approvedTitle);
+      const approvedCompany = company || submission.company || "General";
+      const approvedRoles = role ? repo.toArray(role) : (submission.role ? [submission.role] : ["Product Manager"]);
+      const approvedTypes = categories ? repo.toArray(categories) : (submission.categories && submission.categories.length > 0 ? submission.categories : ["Product sense"]);
+
+      const newQ = await repo.insertQuestion({
+        userId: submission.user_id,
+        title: approvedTitle,
+        company: approvedCompany,
+        role: approvedRoles,
+        type: approvedTypes,
+        isPublished: true,
+        slug: approvedSlug,
+      });
+
+      if (submission.is_interview && submission.company) {
+        await repo.insertReport(newQ.id, {
+          userId: submission.user_id,
+          userName: submission.user_name || "Learner",
+          companyName: submission.company,
+          roleName: approvedRoles[0] || "Product Manager",
+          interviewTiming: submission.interview_timing || "1–3 months ago",
+          status: "approved",
+        });
+      }
+
+      const updated = await repo.updateSubmissionReview(submission.id, {
+        status: "approved",
+        canonicalQuestionId: newQ.id,
+        reviewerId: reviewerId || ADMIN_AUTHOR_ID,
+      });
+
+      return res.json({
+        success: true,
+        message: "Submission approved and question published",
+        submission: updated,
+        question: await repo.hydrateOne(newQ),
+      });
+    }
+
+    return res.status(400).json({ error: "Invalid action. Must be 'approve', 'reject', or 'merge'." });
+  } catch (err) {
+    console.error("Error reviewing submission:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
