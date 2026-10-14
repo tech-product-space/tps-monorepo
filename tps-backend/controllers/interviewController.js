@@ -1245,10 +1245,12 @@ exports.reviewSubmission = async (req, res) => {
     }
 
     if (action === "merge") {
-      if (!canonicalQuestionId) {
+      const canonicalReference = String(canonicalQuestionId ?? "").trim();
+      if (!canonicalReference) {
         return res.status(400).json({ error: "canonicalQuestionId is required to merge" });
       }
-      const canonicalQ = await repo.findQuestionRow(canonicalQuestionId);
+      const canonicalQ = await repo.findQuestionRow(canonicalReference)
+        || await repo.findQuestionRowBySlug(canonicalReference);
       if (!canonicalQ) {
         return res.status(404).json({ error: "Canonical question not found" });
       }
@@ -1267,38 +1269,43 @@ exports.reviewSubmission = async (req, res) => {
       const approvedRoles = role ? repo.toArray(role) : (submission.role ? [submission.role] : ["Product Manager"]);
       const approvedTypes = categories ? repo.toArray(categories) : (submission.categories && submission.categories.length > 0 ? submission.categories : ["Product sense"]);
 
-      const newQ = await repo.insertQuestion({
-        userId: submission.user_id,
-        title: approvedTitle,
-        company: approvedCompany,
-        role: approvedRoles,
-        type: approvedTypes,
-        isPublished: true,
-        slug: approvedSlug,
-      });
-
-      if (submission.is_interview && submission.company) {
-        await repo.insertReport(newQ.id, {
+      const result = await repo.sequelize.transaction(async (transaction) => {
+        const newQ = await repo.insertQuestion({
           userId: submission.user_id,
-          userName: submission.user_name || "Learner",
-          companyName: submission.company,
-          roleName: approvedRoles[0] || "Product Manager",
-          interviewTiming: submission.interview_timing || "1–3 months ago",
-          status: "approved",
-        });
-      }
+          title: approvedTitle,
+          company: approvedCompany,
+          role: approvedRoles,
+          type: approvedTypes,
+          isPublished: true,
+          slug: approvedSlug,
+        }, transaction);
 
-      const updated = await repo.updateSubmissionReview(submission.id, {
-        status: "approved",
-        canonicalQuestionId: newQ.id,
-        reviewerId: reviewerId || ADMIN_AUTHOR_ID,
+        if (submission.is_interview && submission.company) {
+          await repo.insertReport({
+            questionId: newQ.id,
+            userId: submission.user_id,
+            userName: submission.user_name || "Learner",
+            companyName: submission.company,
+            roleName: approvedRoles[0] || "Product Manager",
+            interviewTiming: submission.interview_timing || "1–3 months ago",
+            status: "approved",
+          }, transaction);
+        }
+
+        const updated = await repo.updateSubmissionReview(submission.id, {
+          status: "approved",
+          canonicalQuestionId: newQ.id,
+          reviewerId: reviewerId || ADMIN_AUTHOR_ID,
+        }, transaction);
+
+        return { submission: updated, question: await repo.hydrateOne(newQ, transaction) };
       });
 
       return res.json({
         success: true,
         message: "Submission approved and question published",
-        submission: updated,
-        question: await repo.hydrateOne(newQ),
+        submission: result.submission,
+        question: result.question,
       });
     }
 

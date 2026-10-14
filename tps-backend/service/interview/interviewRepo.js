@@ -820,14 +820,15 @@ const findSubmissionRow = async (publicId) => {
   return rows[0] || null;
 };
 
-const updateSubmissionReview = async (id, { status, rejectionReason, canonicalQuestionId, reviewerId }) => {
+const updateSubmissionReview = async (id, { status, rejectionReason, canonicalQuestionId, reviewerId }, transaction) => {
   await ensureSchema();
   const rows = await select(
     `UPDATE learner_question_submissions
      SET status = $1, rejection_reason = $2, canonical_question_id = $3, reviewed_by = $4, reviewed_at = now()
      WHERE id = $5
      RETURNING *`,
-    [status, rejectionReason || null, canonicalQuestionId || null, reviewerId || null, id]
+    [status, rejectionReason || null, canonicalQuestionId || null, reviewerId || null, id],
+    transaction
   );
   return rows[0] ? serializeLearnerSubmission(rows[0]) : null;
 };
