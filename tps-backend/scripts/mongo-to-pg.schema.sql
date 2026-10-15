@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS tps.interview_answers (
   is_member   BOOLEAN NOT NULL,
   content     TEXT NOT NULL,
   liked_by    INTEGER[] NOT NULL DEFAULT '{}',   -- was likes: [Number]
+  is_expert   BOOLEAN NOT NULL DEFAULT false,
+  is_pinned   BOOLEAN NOT NULL DEFAULT false,
+  status      VARCHAR(32) NOT NULL DEFAULT 'published',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS interview_answers_question_idx ON tps.interview_answers (question_id);
@@ -69,3 +72,30 @@ CREATE TABLE IF NOT EXISTS tps.saved_questions (
   saved_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, question_id)
 );
+
+CREATE TABLE IF NOT EXISTS tps.interview_reports (
+  id               BIGSERIAL PRIMARY KEY,
+  public_id        CHAR(24) NOT NULL UNIQUE,
+  question_id      BIGINT NOT NULL REFERENCES tps.interview_questions(id) ON DELETE CASCADE,
+  user_id          INTEGER NOT NULL,
+  user_name        TEXT,
+  company_name     TEXT NOT NULL,
+  company_logo     TEXT,
+  role_name        TEXT NOT NULL,
+  interview_timing VARCHAR(64) NOT NULL,
+  status           VARCHAR(32) NOT NULL DEFAULT 'pending',
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_at      TIMESTAMPTZ,
+  reviewed_by      INTEGER
+);
+CREATE INDEX IF NOT EXISTS interview_reports_question_idx ON tps.interview_reports (question_id, status);
+
+CREATE TABLE IF NOT EXISTS tps.interview_answer_drafts (
+  id          BIGSERIAL PRIMARY KEY,
+  question_id BIGINT NOT NULL REFERENCES tps.interview_questions(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL,
+  content     TEXT NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (question_id, user_id)
+);
+

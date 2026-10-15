@@ -6,6 +6,7 @@ const { company } = require("../models");
 const { getPaginationParams, getMeta } = require("../utils/pagination");
 const { toSlug } = require("../utils/slugHelpers");
 const repo = require("../service/interview/interviewRepo");
+const { cleanAnswerHtml } = require("../utils/interviewHtml");
 
 // Build a unique slug from a base string (usually the question title),
 // appending -2, -3, ... if the slugified value is already taken.
@@ -27,33 +28,7 @@ const likeTerm = (s) => `%${String(s).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 const withSavedFlag = (docs, savedSet) =>
   docs.map((q) => ({ ...q, isSaved: savedSet.has(q._id) }));
 
-exports.createQuestion = async (req, res) => {
-  try {
-    const { userId, title, phone, isPublished, company, type, role, slug } = req.body;
-
-    const finalSlug = toSlug(slug && slug.trim() ? slug : title);
-
-    // Reject duplicates: a question with the same slug already exists.
-    if (await repo.slugTaken(finalSlug)) {
-      return res.status(409).json({
-        error: "This question has already been asked.",
-        duplicate: true,
-        slug: finalSlug,
-      });
-    }
-
-    const row = await repo.insertQuestion({ userId, title, phone, isPublished, company, type, role, slug: finalSlug });
-    res.status(201).json(await repo.hydrateOne(row));
-  } catch (err) {
-    if (repo.isUniqueViolation(err)) {
-      return res.status(409).json({
-        error: "This question has already been asked.",
-        duplicate: true,
-      });
-    }
-    res.status(500).json({ error: err.message });
-  }
-};
+exports.createQuestion = (req, res) => exports.submitLearnerQuestion(req, res);
 
 // Default identity used when an admin authors a question/answer.
 // The public site badges answers from this userId as "Admin".
@@ -177,7 +152,7 @@ exports.addAnswerAdmin = async (req, res) => {
     }
 
     const question = await repo.findQuestionRow(questionId);
-    if (!question) return res.status(404).json({ error: "Question not found" });
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
 
     await repo.insertAnswer(question.id, {
       userId: userId || ADMIN_AUTHOR_ID,
@@ -194,9 +169,9 @@ exports.addAnswerAdmin = async (req, res) => {
 
 exports.getAllQuestions = async (req, res) => {
   try {
-    const userId = req.query.userId ? parseInt(req.query.userId) : null;
+    const userId = req.appUser ? Number(req.appUser.id) : null;
 
-    const rows = await repo.select("SELECT * FROM interview_questions WHERE is_published = true ORDER BY id");
+    const rows = await repo.select("SELECT * FROM interview_questions WHERE is_published = true AND slug IS NOT NULL AND btrim(slug) <> '' ORDER BY id");
     const questions = await repo.hydrate(rows);
 
     const savedSet = await repo.savedPublicIdSet(userId);
@@ -212,11 +187,24 @@ exports.getAllUserQuestions = async (req, res) => {
   try {
     const { page, limit, offset } = getPaginationParams(req.query);
 
-    const userId = req.query.userId ? parseInt(req.query.userId) : null;
+    const userId = req.appUser ? Number(req.appUser.id) : null;
     const onlySaved = req.query.onlySaved === "true";
+    const view = req.query.view || (onlySaved ? "saved" : "all");
     const { company, type, role, search } = req.query;
 
-    const where = ["q.is_published = true"];
+    if (view === "mine") {
+      if (!userId) {
+        return res.json({ success: true, meta: getMeta(0, page, limit), data: [] });
+      }
+      const mySubmissions = await repo.listUserSubmissions(userId);
+      return res.json({
+        success: true,
+        meta: getMeta(mySubmissions.length, 1, Math.max(limit, mySubmissions.length)),
+        data: mySubmissions,
+      });
+    }
+
+    const where = ["q.is_published = true", "q.slug IS NOT NULL AND btrim(q.slug) <> ''"];
     const bind = [];
     const param = (v) => {
       bind.push(v);
@@ -224,19 +212,29 @@ exports.getAllUserQuestions = async (req, res) => {
     };
 
     if (company && company !== "all") where.push(`q.company = ${param(company)}`);
-    if (type && type !== "all") where.push(`q.types && ${param(repo.toArray(type))}::text[]`);
-    if (role && role !== "all") where.push(`q.roles && ${param(repo.toArray(role))}::text[]`);
-    if (search && search.trim() !== "") where.push(`q.title ILIKE ${param(likeTerm(search))}`);
+
+    const typeValues = repo.toArray(type).flatMap((t) => String(t).split(",")).map((s) => s.trim()).filter(Boolean);
+    if (typeValues.length > 0 && !typeValues.includes("all")) {
+      where.push(`q.types && ${param(typeValues)}::text[]`);
+    }
+
+    if (role && role !== "all") {
+      where.push(`q.roles && ${param(repo.toArray(role))}::text[]`);
+    }
+
+    if (search && search.trim() !== "") {
+      where.push(`(q.title ILIKE ${param(likeTerm(search))} OR q.company ILIKE ${param(likeTerm(search))})`);
+    }
 
     // Saved flag for this user (false for everyone when no userId).
     const savedExpr = userId
       ? `EXISTS (SELECT 1 FROM saved_questions s WHERE s.question_id = q.id AND s.user_id = ${param(userId)})`
       : "false";
-    if (onlySaved) where.push(savedExpr);
+    if (onlySaved || view === "saved") where.push(savedExpr);
 
     // The userId param is the last one added; the count only references it
     // when filtering to saved questions.
-    const countBind = userId && !onlySaved ? bind.slice(0, -1) : bind.slice();
+    const countBind = userId && !(onlySaved || view === "saved") ? bind.slice(0, -1) : bind.slice();
 
     const whereSql = where.join(" AND ");
     const [{ count }] = await repo.select(
@@ -244,10 +242,18 @@ exports.getAllUserQuestions = async (req, res) => {
       countBind
     );
 
+    const sort = req.query.sort || req.query.sortBy || "recent";
+    let orderSql = "q.created_at DESC, q.id ASC";
+    if (sort === "discussed") {
+      orderSql = "(SELECT count(*) FROM interview_answers a WHERE a.question_id = q.id AND a.status = 'published') DESC, q.created_at DESC, q.id ASC";
+    } else if (sort === "reported") {
+      orderSql = "(SELECT count(*) FROM interview_reports r WHERE r.question_id = q.id AND r.status = 'approved') DESC, q.created_at DESC";
+    }
+
     const rows = await repo.select(
       `SELECT q.*, ${savedExpr} AS is_saved FROM interview_questions q
         WHERE ${whereSql}
-        ORDER BY q.created_at DESC, q.id ASC
+        ORDER BY ${orderSql}
         LIMIT ${param(limit)} OFFSET ${param(offset)}`,
       bind
     );
@@ -314,7 +320,7 @@ exports.getUnpublishedQuestionsPaginated = listByPublished(false);
 exports.getQuestionById = async (req, res) => {
   try {
     const { id } = req.params; // from route /questions/:id
-    const userId = req.query.userId ? parseInt(req.query.userId) : null;
+    const userId = req.appUser ? Number(req.appUser.id) : null;
 
     const row = await repo.findQuestionRow(id);
 
@@ -331,36 +337,9 @@ exports.getQuestionById = async (req, res) => {
       isSaved = saved.length > 0;
     }
 
-    return res.json({ ...(await repo.hydrateOne(row)), isSaved });
+    return res.json({ ...(await repo.hydrateOne(row, undefined, !!req.staff)), isSaved });
   } catch (err) {
     console.error("Error fetching question by ID:", err);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-exports.getQuestionWithRelated = async (req, res) => {
-  try {
-    const { slug } = req.params;
-
-    const question = await repo.findQuestionRowBySlug(slug);
-
-    if (!question) {
-      return res.status(404).json({ error: "Question not found" });
-    }
-
-    // Same type, or same company; any publish state (matches the old query).
-    const related = await repo.select(
-      `SELECT * FROM interview_questions
-        WHERE id <> $1
-          AND (types && $2::text[] OR company IS NOT DISTINCT FROM $3)
-        ORDER BY id
-        LIMIT 10`,
-      [question.id, question.types || [], question.company]
-    );
-
-    return res.json(await repo.hydrate(related));
-  } catch (err) {
-    console.error("Error fetching question with related:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -399,9 +378,14 @@ exports.addAnswer = async (req, res) => {
     const isMember = !!user;
 
     const question = await repo.findQuestionRow(questionId);
-    if (!question) return res.status(404).json({ error: "Question not found" });
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
 
-    await repo.insertAnswer(question.id, { userId, userName, isMember, content });
+    const newAnswer = await repo.insertAnswer(question.id, { userId, userName, isMember, content });
+
+
+    if (userId) {
+      await repo.deleteAnswerDraft(question.id, userId);
+    }
 
     res.status(201).json(await repo.hydrateOne(question));
   } catch (err) {
@@ -413,12 +397,12 @@ exports.addAnswer = async (req, res) => {
 const loadAnswer = async (req, res) => {
   const { questionId, answerId } = req.params;
   const question = await repo.findQuestionRow(questionId);
-  if (!question) {
+  if (!question || (!req.staff && !question.is_published)) {
     res.status(404).json({ error: "Question not found" });
     return null;
   }
   const answer = await repo.findAnswerRow(question.id, answerId);
-  if (!answer) {
+  if (!answer || (!req.staff && answer.status !== "published")) {
     res.status(404).json({ error: "Answer not found" });
     return null;
   }
@@ -429,7 +413,7 @@ const setAnswerContent = async (answerRow, content) =>
   (
     await repo.select(
       "UPDATE interview_answers SET content = $1 WHERE id = $2 RETURNING *",
-      [content, answerRow.id]
+      [cleanAnswerHtml(content), answerRow.id]
     )
   )[0];
 
@@ -440,7 +424,7 @@ exports.editAnswer = async (req, res) => {
     const found = await loadAnswer(req, res);
     if (!found) return;
 
-    if (found.answer.user_id !== userId) {
+    if (Number(found.answer.user_id) !== Number(req.appUser.id)) {
       return res.status(403).json({ error: "You cannot edit someone else's answer" });
     }
 
@@ -457,7 +441,7 @@ exports.editAnswer = async (req, res) => {
 
 exports.deleteAnswer = async (req, res) => {
   try {
-    const { userId } = req.query;
+    const userId = Number(req.appUser.id);
 
     const found = await loadAnswer(req, res);
     if (!found) return;
@@ -536,13 +520,13 @@ exports.addFeedback = async (req, res) => {
     const { userId, feedbackText, userName, email } = req.body;
 
     const question = await repo.findQuestionRow(req.params.questionId);
-    if (!question) return res.status(404).json({ error: "Question not found" });
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
 
     const user = await company.findOne({ where: { email } });
     const isMember = !!user;
 
     const answer = await repo.findAnswerRow(question.id, req.params.answerId);
-    if (!answer) return res.status(404).json({ error: "Answer not found" });
+    if (!answer || (!req.staff && answer.status !== "published")) return res.status(404).json({ error: "Answer not found" });
 
     await repo.insertFeedback(answer.id, { userId, userName, isMember, feedbackText });
 
@@ -558,7 +542,7 @@ exports.saveQuestion = async (req, res) => {
     const { questionId } = req.params;
 
     const question = await repo.findQuestionRow(questionId);
-    if (!question) return res.status(404).json({ error: "Question not found" });
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
 
     const existing = await repo.select(
       "SELECT id FROM saved_questions WHERE user_id = $1 AND question_id = $2",
@@ -587,14 +571,14 @@ exports.saveQuestion = async (req, res) => {
 // the full question document under `questionId`.
 exports.getSavedQuestions = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = Number(req.appUser.id);
 
     // Ordered by question id: Mongo served this from its {userId, questionId}
     // index, so the list came back sorted by questionId, not by save time.
     const saved = await repo.select(
       `SELECT s.* FROM saved_questions s
          JOIN interview_questions q ON q.id = s.question_id
-        WHERE s.user_id = $1
+        WHERE s.user_id = $1 AND q.is_published = true
         ORDER BY q.public_id`,
       [userId]
     );
@@ -651,7 +635,7 @@ exports.editFeedback = async (req, res) => {
     if (!found) return;
 
     // Check if the user is the owner of the feedback
-    if (found.feedback.user_id !== userId) {
+    if (Number(found.feedback.user_id) !== Number(req.appUser.id)) {
       return res.status(403).json({ error: "You can only edit your own feedback" });
     }
 
@@ -774,7 +758,7 @@ exports.checkSlugAvailability = async (req, res) => {
 exports.getBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const userId = req.query.userId ? parseInt(req.query.userId) : null;
+    const userId = req.appUser ? Number(req.appUser.id) : null;
 
     if (!slug) {
       return res.status(400).json({
@@ -782,7 +766,7 @@ exports.getBySlug = async (req, res) => {
       });
     }
 
-    const row = await repo.findQuestionRowBySlug(slug);
+    const row = await repo.findPublishedQuestionBySlug(slug);
 
     if (!row) {
       return res.status(404).json({
@@ -858,7 +842,7 @@ exports.getQuestionMetaBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const question = await repo.findQuestionRowBySlug(slug);
+    const question = await repo.findPublishedQuestionBySlug(slug);
 
     if (!question) {
       return res.status(404).json({ error: "Question not found" });
@@ -872,4 +856,380 @@ exports.getQuestionMetaBySlug = async (req, res) => {
     console.error("Error fetching question meta by slug:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
+};
+
+// GET /interview/questions/:slug/with-related
+exports.getQuestionWithRelated = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const row = await repo.findPublishedQuestionBySlug(slug);
+    if (!row) {
+      return res.status(404).json({ error: "Question not found" });
+    }
+
+    const types = row.types || [];
+    const roles = row.roles || [];
+
+    let relatedRows = [];
+    if (types.length || roles.length) {
+      relatedRows = await repo.select(
+        `SELECT * FROM interview_questions
+         WHERE is_published = true AND id <> $1 AND (types && $2 OR roles && $3)
+         ORDER BY created_at DESC LIMIT 4`,
+        [row.id, types, roles]
+      );
+    }
+
+    if (relatedRows.length < 4) {
+      const excludeIds = [row.id, ...relatedRows.map((r) => r.id)];
+      const fillers = await repo.select(
+        `SELECT * FROM interview_questions
+         WHERE is_published = true AND id <> ALL($1)
+         ORDER BY created_at DESC LIMIT $2`,
+        [excludeIds, 4 - relatedRows.length]
+      );
+      relatedRows = [...relatedRows, ...fillers];
+    }
+
+    const hydrated = await repo.hydrate(relatedRows);
+    return res.json(hydrated);
+  } catch (err) {
+    console.error("Error in getQuestionWithRelated:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// POST /interview/questions/:questionId/reports
+exports.submitReport = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const { userId, userName, companyName, roleName, interviewTiming, companyLogo } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Please sign in to submit a report." });
+    }
+    if (!companyName || !companyName.trim()) {
+      return res.status(400).json({ error: "Company name is required." });
+    }
+    if (!roleName || !roleName.trim()) {
+      return res.status(400).json({ error: "Role is required." });
+    }
+    if (!interviewTiming) {
+      return res.status(400).json({ error: "Interview timing is required." });
+    }
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question) {
+      return res.status(404).json({ error: "Question not found" });
+    }
+
+    const report = await repo.insertReport({
+      questionId: question.id,
+      userId,
+      userName: userName || "Learner",
+      companyName,
+      companyLogo,
+      roleName,
+      interviewTiming,
+      status: "pending",
+    });
+
+    return res.status(201).json({
+      message: "Report submitted successfully for review.",
+      report: repo.serializeReport(report),
+    });
+  } catch (err) {
+    console.error("Error submitting interview report:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/questions/:questionId/draft
+exports.getDraft = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const userId = Number(req.appUser.id);
+    if (!userId) return res.json({ content: "" });
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
+
+    const draft = await repo.getAnswerDraft(question.id, userId);
+    return res.json(draft || { content: "" });
+  } catch (err) {
+    console.error("Error fetching draft:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/questions/:questionId/draft
+exports.saveDraft = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const { userId, content } = req.body;
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
+
+    const draft = await repo.saveAnswerDraft(question.id, userId, content || "");
+    return res.json({ message: "Draft saved", draft });
+  } catch (err) {
+    console.error("Error saving draft:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/admin/interview-reports
+exports.listReportsAdmin = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const { status, questionId } = req.query;
+
+    const result = await repo.listReports({ page, limit, status, questionId });
+    return res.json(result);
+  } catch (err) {
+    console.error("Error listing reports:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/admin/interview-reports/:id
+exports.updateReportAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, companyName, roleName, reviewedBy } = req.body;
+
+    const updated = await repo.updateReport(id, {
+      status,
+      companyName,
+      roleName,
+      reviewedBy,
+    });
+    if (!updated) return res.status(404).json({ error: "Report not found" });
+
+    return res.json({
+      message: "Report updated successfully",
+      report: repo.serializeReport(updated),
+    });
+  } catch (err) {
+    console.error("Error updating report:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/questions/:questionId/answers/:answerId/expert
+exports.toggleExpertAnswerAdmin = async (req, res) => {
+  try {
+    const { questionId, answerId } = req.params;
+    const { isExpert } = req.body;
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
+    const answer = await repo.findAnswerRow(question.id, answerId);
+    if (!answer) return res.status(404).json({ error: "Answer not found" });
+
+    const updated = await repo.toggleExpertAnswer(answer.id, isExpert);
+    return res.json({
+      message: "Expert status updated",
+      answer: await repo.answerWithFeedback(updated),
+    });
+  } catch (err) {
+    console.error("Error updating expert answer status:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/questions/:questionId/answers/:answerId/pin
+exports.togglePinnedAnswerAdmin = async (req, res) => {
+  try {
+    const { questionId, answerId } = req.params;
+    const { isPinned } = req.body;
+
+    const question = await repo.findQuestionRow(questionId);
+    if (!question || (!req.staff && !question.is_published)) return res.status(404).json({ error: "Question not found" });
+    const answer = await repo.findAnswerRow(question.id, answerId);
+    if (!answer) return res.status(404).json({ error: "Answer not found" });
+
+    const updated = await repo.togglePinnedAnswer(answer.id, isPinned);
+    return res.json({
+      message: "Pinned status updated",
+      answer: await repo.answerWithFeedback(updated),
+    });
+  } catch (err) {
+    console.error("Error updating pinned answer status:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /interview/questions/submit
+exports.submitLearnerQuestion = async (req, res) => {
+  try {
+    const {
+      userId,
+      userName,
+      userEmail,
+      title,
+      context,
+      categories,
+      role,
+      customRole,
+      isInterview,
+      company,
+      interviewTiming,
+      notifyOnAnswer,
+    } = req.body;
+
+    if (!title || !title.trim() || title.trim().length < 12) {
+      return res.status(400).json({ error: "Question must be at least 12 characters long" });
+    }
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
+    const submission = await repo.insertLearnerSubmission({
+      userId,
+      userName,
+      userEmail,
+      title: title.trim(),
+      context: context ? context.trim() : "",
+      categories: categories || repo.toArray(req.body.type),
+      role: Array.isArray(role) ? role[0] || "" : role || "",
+      customRole: customRole ? customRole.trim() : "",
+      isInterview: !!isInterview,
+      company: company ? company.trim() : "",
+      interviewTiming: interviewTiming || "",
+      notifyOnAnswer: notifyOnAnswer !== false,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Question submitted for review",
+      submission,
+    });
+  } catch (err) {
+    console.error("Error submitting learner question:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/questions/my-submissions
+exports.getMySubmissions = async (req, res) => {
+  try {
+    const userId = req.appUser ? Number(req.appUser.id) : null;
+    if (!userId) {
+      return res.json([]);
+    }
+    const submissions = await repo.listUserSubmissions(userId);
+    res.json(submissions);
+  } catch (err) {
+    console.error("Error fetching user submissions:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/questions/suggest-duplicates
+exports.suggestDuplicates = async (req, res) => {
+  try {
+    const q = req.query.q || req.query.query || "";
+    if (!q || q.trim().length < 3) {
+      return res.json([]);
+    }
+    const matches = await repo.suggestDuplicates(q.trim(), 5);
+    res.json(matches);
+  } catch (err) {
+    console.error("Error suggesting duplicate questions:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /interview/admin/question-submissions
+exports.getAdminSubmissions = async (req, res) => {
+  try {
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const status = req.query.status || "all";
+
+    const { submissions, total } = await repo.listAdminSubmissions({
+      status,
+      limit,
+      offset,
+    });
+
+    res.json({
+      submissions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (err) {
+    console.error("Error fetching admin submissions:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// PUT /interview/admin/question-submissions/:id/review
+exports.reviewSubmission = async (req, res) => {
+  const { id } = req.params;
+  const { action, rejectionReason, canonicalQuestionId, company, role, categories, title } = req.body;
+  if (!["approve", "reject", "merge"].includes(action)) return res.status(400).json({ error: "Invalid review action" });
+  try {
+    await repo.ensureSchema();
+    const result = await repo.sequelize.transaction(async transaction => {
+      // Lock the submission before checking state: simultaneous approvals cannot
+      // create two public questions, and failed publication rolls back review.
+      const submission = await repo.findSubmissionRow(id, transaction);
+      if (!submission) throw Object.assign(new Error("Submission not found"), { status: 404 });
+      if (submission.status !== "pending") throw Object.assign(new Error("Submission has already been reviewed"), { status: 409 });
+      const reviewerId = Number(req.staff.id);
+      if (action === "reject") {
+        return { submission: await repo.updateSubmissionReview(submission.id, {
+          status: "rejected", rejectionReason: rejectionReason || "Does not meet community guidelines", reviewerId,
+        }, transaction) };
+      }
+      if (action === "merge") {
+        const reference = String(canonicalQuestionId || "").trim();
+        if (!reference) throw Object.assign(new Error("Canonical question is required"), { status: 400 });
+        const [canonical] = await repo.select(
+          "SELECT * FROM interview_questions WHERE (public_id = $1 OR slug = $1) AND is_published = true FOR SHARE",
+          [reference], transaction);
+        if (!canonical) throw Object.assign(new Error("Published canonical question not found"), { status: 404 });
+        return { submission: await repo.updateSubmissionReview(submission.id, {
+          status: "merged", canonicalQuestionId: canonical.id, reviewerId,
+        }, transaction) };
+      }
+      const approvedTitle = String(title || submission.title).trim();
+      if (approvedTitle.length < 12) throw Object.assign(new Error("Question must be at least 12 characters long"), { status: 400 });
+      const approvedRoles = role ? repo.toArray(role) : submission.role ? [submission.role] : ["Product Manager"];
+      const approvedTypes = categories ? repo.toArray(categories) : submission.categories?.length ? submission.categories : ["Product sense"];
+      const question = await repo.insertQuestion({
+        userId: submission.user_id, title: approvedTitle, company: company || submission.company || "General",
+        role: approvedRoles, type: approvedTypes, isPublished: true, slug: await generateUniqueSlug(approvedTitle),
+      }, transaction);
+      if (submission.is_interview && submission.company) {
+        await repo.insertReport({ questionId: question.id, userId: submission.user_id,
+          userName: submission.user_name || "Learner", companyName: submission.company,
+          roleName: approvedRoles[0] || "Product Manager", interviewTiming: submission.interview_timing || "unknown",
+          status: "approved", reviewedBy: reviewerId,
+        }, transaction);
+      }
+      return { question: await repo.hydrateOne(question, transaction),
+        submission: await repo.updateSubmissionReview(submission.id, {
+          status: "approved", canonicalQuestionId: question.id, reviewerId,
+        }, transaction) };
+    });
+    return res.json({ success: true, message: action === "approve" ? "Submission approved and question published" : action === "merge" ? "Submission merged into canonical question" : "Submission rejected", ...result });
+  } catch (error) {
+    return res.status(error.status || (repo.isUniqueViolation(error) ? 409 : 500)).json({ error: error.status ? error.message : "Unable to review submission" });
+  }
+};
+
+// Only canonical, public identifiers and actual content-change dates leave here.
+exports.getQuestionSitemap = async (req, res) => {
+  try {
+    const rows = await repo.select(
+      "SELECT slug, COALESCE(updated_at, created_at) AS last_modified FROM interview_questions WHERE is_published = true AND slug IS NOT NULL AND btrim(slug) <> '' ORDER BY slug");
+    res.json(rows.map(row => ({ slug: row.slug, lastModified: row.last_modified })));
+  } catch (error) { res.status(503).json({ error: "Question sitemap unavailable" }); }
 };
