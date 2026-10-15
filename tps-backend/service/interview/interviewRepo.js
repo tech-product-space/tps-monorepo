@@ -8,6 +8,7 @@
 // internal BIGINT ids never leave this module. Tables live in the "tps"
 // schema, resolved through the connection's search_path.
 const crypto = require("crypto");
+const { cleanAnswerHtml } = require("../../utils/interviewHtml");
 const { QueryTypes } = require("sequelize");
 const { sequelize } = require("../../models");
 
@@ -283,7 +284,7 @@ const serializeAnswer = (a, feedback = []) => ({
   userId: a.user_id,
   userName: a.user_name,
   isMember: a.is_member,
-  content: a.content,
+  content: cleanAnswerHtml(a.content),
   likes: (a.liked_by || []).map(Number),
   feedback: feedback.map(serializeFeedback),
   isExpert: !!a.is_expert,
@@ -321,12 +322,12 @@ const serializeQuestion = (q, answers = [], interviewContext = null) => {
 
 // Load answers + feedback + reports for a set of question rows and return full
 // documents in the same order as `rows`.
-const hydrate = async (rows, transaction) => {
+const hydrate = async (rows, transaction, includePrivateAnswers = false) => {
   if (!rows.length) return [];
   await ensureSchema();
   const qIds = rows.map((r) => r.id);
   const answers = await select(
-    "SELECT * FROM interview_answers WHERE question_id = ANY($1) ORDER BY id",
+    `SELECT * FROM interview_answers WHERE question_id = ANY($1) ${includePrivateAnswers ? '' : "AND status = 'published'"} ORDER BY id`,
     [qIds],
     transaction
   );
@@ -375,12 +376,18 @@ const hydrate = async (rows, transaction) => {
   );
 };
 
-const hydrateOne = async (row, transaction) => (row ? (await hydrate([row], transaction))[0] : null);
+const hydrateOne = async (row, transaction, includePrivateAnswers = false) => (row ? (await hydrate([row], transaction, includePrivateAnswers))[0] : null);
 
 // ---- lookups --------------------------------------------------------------
 
 const findQuestionRow = async (publicId, transaction) =>
   (await select("SELECT * FROM interview_questions WHERE public_id = $1", [String(publicId)], transaction))[0] || null;
+
+const findPublishedQuestionBySlug = async (slug, transaction) =>
+  (await select("SELECT * FROM interview_questions WHERE slug = $1 AND is_published = true", [slug], transaction))[0] || null;
+
+const findPublishedQuestion = async (publicId) =>
+  (await select("SELECT * FROM interview_questions WHERE public_id = $1 AND is_published = true", [String(publicId)]))[0] || null;
 
 const findQuestionRowBySlug = async (slug) =>
   (await select("SELECT * FROM interview_questions WHERE slug = $1", [slug]))[0] || null;
@@ -463,7 +470,7 @@ const insertAnswer = async (questionRowId, a, transaction) =>
       `INSERT INTO interview_answers
          (public_id, question_id, user_id, user_name, is_member, content, liked_by)
        VALUES ($1,$2,$3,$4,$5,$6,'{}') RETURNING *`,
-      [newPublicId(), questionRowId, a.userId, a.userName, !!a.isMember, a.content],
+      [newPublicId(), questionRowId, a.userId, a.userName, !!a.isMember, cleanAnswerHtml(a.content)],
       transaction
     )
   )[0];
@@ -495,24 +502,23 @@ const QUESTION_COLUMNS = {
 };
 
 const updateQuestion = async (publicId, fields) => {
-  const sets = [];
-  const bind = [];
+  const sets = [], changes = [], publicChanges = [], bind = [];
   for (const [key, col] of Object.entries(QUESTION_COLUMNS)) {
-    if (fields[key] === undefined) continue;
-    let v = fields[key];
-    if (key === "role" || key === "type") v = toArray(v);
-    if (key === "isPublished") v = toBool(v, false);
-    bind.push(v);
-    sets.push(`${col} = $${bind.length}`);
+    if (key === "updatedAt" || fields[key] === undefined) continue;
+    let value = fields[key];
+    if (key === "role" || key === "type") value = toArray(value);
+    if (key === "isPublished") value = toBool(value, false);
+    bind.push(value);
+    sets.push(col + " = $" + bind.length);
+    changes.push(col + " IS DISTINCT FROM $" + bind.length);
+    if (key !== "phone") publicChanges.push(col + " IS DISTINCT FROM $" + bind.length);
   }
   if (!sets.length) return findQuestionRow(publicId);
+  sets.push("updated_at = CASE WHEN (" + (publicChanges.join(" OR ") || "false") + ") THEN now() ELSE updated_at END");
   bind.push(String(publicId));
-  return (
-    await select(
-      `UPDATE interview_questions SET ${sets.join(", ")} WHERE public_id = $${bind.length} RETURNING *`,
-      bind
-    )
-  )[0] || null;
+  const rows = await select(
+    "UPDATE interview_questions SET " + sets.join(", ") + " WHERE public_id = $" + bind.length + " AND (" + changes.join(" OR ") + ") RETURNING *", bind);
+  return rows[0] || findQuestionRow(publicId);
 };
 
 // ---- reports --------------------------------------------------------------
@@ -811,11 +817,11 @@ const listAdminSubmissions = async ({ status = "all", limit = 20, offset = 0 }) 
   };
 };
 
-const findSubmissionRow = async (publicId) => {
+const findSubmissionRow = async (publicId, transaction) => {
   await ensureSchema();
   const rows = await select(
-    "SELECT * FROM learner_question_submissions WHERE public_id = $1",
-    [publicId]
+    `SELECT * FROM learner_question_submissions WHERE public_id = $1 ${transaction ? "FOR UPDATE" : ""}`,
+    [publicId], transaction
   );
   return rows[0] || null;
 };
@@ -838,7 +844,7 @@ const suggestDuplicates = async (queryText, limit = 5) => {
   const term = `%${String(queryText).replace(/[\%_]/g, (c) => `\\${c}`)}%`;
   const rows = await select(
     `SELECT q.id, q.public_id, q.title, q.slug, q.company, q.roles, q.types,
-            (SELECT count(*)::int FROM interview_answers a WHERE a.question_id = q.id) as answers_count
+            (SELECT count(*)::int FROM interview_answers a WHERE a.question_id = q.id AND a.status = 'published') as answers_count
      FROM interview_questions q
      WHERE q.is_published = true AND (q.title ILIKE $1 OR q.company ILIKE $1)
      ORDER BY answers_count DESC, q.created_at DESC
@@ -871,6 +877,8 @@ module.exports = {
   answerWithFeedback,
   findQuestionRow,
   findQuestionRowBySlug,
+  findPublishedQuestionBySlug,
+  findPublishedQuestion,
   slugTaken,
   findAnswerRow,
   findFeedbackRow,

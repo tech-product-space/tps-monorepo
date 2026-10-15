@@ -43,6 +43,7 @@
     "nodemailer": "^6.10.1",
     "pg": "^8.16.3",
     "pg-hstore": "^2.3.4",
+    "sanitize-html": "2.18.0",
     "sequelize": "^6.37.7",
     "ulid": "^3.0.1"
   },
