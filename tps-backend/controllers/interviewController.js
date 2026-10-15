@@ -7,6 +7,7 @@ const { getPaginationParams, getMeta } = require("../utils/pagination");
 const { toSlug } = require("../utils/slugHelpers");
 const repo = require("../service/interview/interviewRepo");
 const { cleanAnswerHtml } = require("../utils/interviewHtml");
+const { topicQuery, buildDirectories } = require("../service/interview/discovery");
 
 // Build a unique slug from a base string (usually the question title),
 // appending -2, -3, ... if the slugified value is already taken.
@@ -185,6 +186,7 @@ exports.getAllQuestions = async (req, res) => {
 
 exports.getAllUserQuestions = async (req, res) => {
   try {
+    await repo.ensureSchema();
     const { page, limit, offset } = getPaginationParams(req.query);
 
     const userId = req.appUser ? Number(req.appUser.id) : null;
@@ -211,15 +213,19 @@ exports.getAllUserQuestions = async (req, res) => {
       return `$${bind.length}`;
     };
 
-    if (company && company !== "all") where.push(`q.company = ${param(company)}`);
+    if (company && company !== "all") {
+      const value = param(company);
+      where.push(`(lower(q.company) = lower(${value}) OR EXISTS (SELECT 1 FROM interview_reports r WHERE r.question_id = q.id AND r.status = 'approved' AND lower(r.company_name) = lower(${value})))`);
+    }
 
     const typeValues = repo.toArray(type).flatMap((t) => String(t).split(",")).map((s) => s.trim()).filter(Boolean);
     if (typeValues.length > 0 && !typeValues.includes("all")) {
-      where.push(`q.types && ${param(typeValues)}::text[]`);
+      where.push(`EXISTS (SELECT 1 FROM unnest(q.types) t WHERE lower(t) = ANY(${param(typeValues.map(t => t.toLowerCase()))}::text[]))`);
     }
 
     if (role && role !== "all") {
-      where.push(`q.roles && ${param(repo.toArray(role))}::text[]`);
+      const value = param(repo.toArray(role).map(r => String(r).toLowerCase()));
+      where.push(`(EXISTS (SELECT 1 FROM unnest(q.roles) r WHERE lower(r) = ANY(${value}::text[])) OR EXISTS (SELECT 1 FROM interview_reports r WHERE r.question_id = q.id AND r.status = 'approved' AND lower(r.role_name) = ANY(${value}::text[])))`);
     }
 
     if (search && search.trim() !== "") {
@@ -867,35 +873,51 @@ exports.getQuestionWithRelated = async (req, res) => {
       return res.status(404).json({ error: "Question not found" });
     }
 
-    const types = row.types || [];
-    const roles = row.roles || [];
-
-    let relatedRows = [];
-    if (types.length || roles.length) {
-      relatedRows = await repo.select(
-        `SELECT * FROM interview_questions
-         WHERE is_published = true AND id <> $1 AND (types && $2 OR roles && $3)
-         ORDER BY created_at DESC LIMIT 4`,
-        [row.id, types, roles]
-      );
-    }
-
-    if (relatedRows.length < 4) {
-      const excludeIds = [row.id, ...relatedRows.map((r) => r.id)];
-      const fillers = await repo.select(
-        `SELECT * FROM interview_questions
-         WHERE is_published = true AND id <> ALL($1)
-         ORDER BY created_at DESC LIMIT $2`,
-        [excludeIds, 4 - relatedRows.length]
-      );
-      relatedRows = [...relatedRows, ...fillers];
-    }
+    // Rank on the public inventory before hydrating answers. Full-text search is
+    // native PostgreSQL; no embedding service or extension is required.
+    const relatedRows = await repo.select(
+      `WITH candidates AS (
+        SELECT q.*,
+          ts_rank_cd(to_tsvector('english', coalesce(q.title, '')), websearch_to_tsquery('english', $2)) AS topic_score,
+          (SELECT count(*) FROM unnest(q.types) t WHERE lower(t) = ANY($3::text[])) AS category_score,
+          CASE WHEN lower(coalesce(q.company, '')) = lower($4) AND lower($4) NOT IN ('', 'general') THEN 1 ELSE 0 END AS company_score,
+          (SELECT count(*) FROM unnest(q.roles) r WHERE lower(r) = ANY($5::text[])) AS role_score
+        FROM interview_questions q
+        WHERE q.is_published = true AND q.id <> $1 AND q.slug IS NOT NULL AND btrim(q.slug) <> ''
+          AND regexp_replace(lower(q.title), '[^a-z0-9]', '', 'g') <> regexp_replace(lower($6), '[^a-z0-9]', '', 'g')
+      ) SELECT * FROM candidates
+        WHERE topic_score > 0 OR category_score > 0 OR company_score > 0 OR role_score > 0
+        ORDER BY (topic_score > 0) DESC, topic_score DESC, category_score DESC, company_score DESC, role_score DESC, created_at DESC, id ASC
+        LIMIT 4`,
+      [row.id, topicQuery(row.title), (row.types || []).map(t => t.toLowerCase()), row.company || '', (row.roles || []).map(r => r.toLowerCase()), row.title]
+    );
 
     const hydrated = await repo.hydrate(relatedRows);
     return res.json(hydrated);
   } catch (err) {
     console.error("Error in getQuestionWithRelated:", err);
     return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.getQuestionDirectories = async (req, res) => {
+  try {
+    await repo.ensureSchema();
+    const rows = await repo.select(`
+      SELECT q.id, q.types, q.updated_at,
+        ARRAY(SELECT DISTINCT name FROM (
+          SELECT q.company AS name UNION ALL
+          SELECT r.company_name FROM interview_reports r WHERE r.question_id = q.id AND r.status = 'approved'
+        ) companies WHERE name IS NOT NULL AND btrim(name) <> '') AS companies,
+        ARRAY(SELECT DISTINCT name FROM (
+          SELECT unnest(q.roles) AS name UNION ALL
+          SELECT r.role_name FROM interview_reports r WHERE r.question_id = q.id AND r.status = 'approved'
+        ) roles WHERE name IS NOT NULL AND btrim(name) <> '') AS roles
+      FROM interview_questions q
+      WHERE q.is_published = true AND q.slug IS NOT NULL AND btrim(q.slug) <> ''`);
+    return res.json(buildDirectories(rows));
+  } catch (error) {
+    return res.status(503).json({ error: 'Question directories unavailable' });
   }
 };
 

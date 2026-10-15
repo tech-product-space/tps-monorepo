@@ -5,6 +5,7 @@ const interviewController = require('../controllers/interviewController');
 const { learner, admin, publicOrLearner, responsePolicy } = require('../middlewares/interviewAccess');
 router.use(responsePolicy);
 router.get('/sitemap', interviewController.getQuestionSitemap);
+router.get('/directories', interviewController.getQuestionDirectories);
 
 // slug routes
 router.get("/question/slug-availability", admin, interviewController.checkSlugAvailability);
