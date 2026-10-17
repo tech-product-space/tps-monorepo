@@ -67,6 +67,41 @@ exports.uploadRecordingFile = async (req, res) => {
     }
 };
 
+// Reviewer photos and before/after company logos for the /reviews page.
+// Same key-based contract as uploadAiProductFile; images only, since every
+// field that uses it renders the result in an <img>.
+exports.uploadReviewFile = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: "No file uploaded." });
+        }
+
+        const file = req.file;
+        if (!file.mimetype || !file.mimetype.startsWith("image/")) {
+            return res.status(400).json({ message: "Only image files are allowed." });
+        }
+
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]+/g, "-");
+        const key = `reviews/${Date.now()}-${safeName}`;
+
+        await s3.send(new PutObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: key,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+        }));
+
+        res.status(200).json({
+            message: "File uploaded successfully",
+            key,
+            fileUrl: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
+        });
+    } catch (error) {
+        console.error("S3 Upload Error:", error);
+        res.status(500).json({ message: "Upload failed", error });
+    }
+};
+
 // The media library behind the image picker.
 //
 // One endpoint over an allowlist of prefixes rather than one endpoint per
