@@ -153,3 +153,10 @@ db/.db_credentials
 .DS_Store
 # AWS tunnel credentials (per developer) - never commit
 *-tunnel-credentials.txt
+
+# Local production snapshots and private development connection settings
+.local-db/
+
+db/compose.local.yml
+db/copy-production-local.cjs
+db/LOCAL_DEVELOPMENT.md
