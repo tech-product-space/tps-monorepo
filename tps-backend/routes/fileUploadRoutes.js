@@ -1,13 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const upload = require("../middlewares/multer");
-const { uploadFile, uploadBlogsFile, getAllBlogFiles, deleteBlogFile, uploadResumeFile, getAllResumeFiles, uploadProjectFile,uploadJobApplicationResume,uploadScholarshipApplicationResume, deleteProjectFile, deleteResumeFile, uploadEventFile, deleteEventFile , uploadWrittenCourseFile , deleteWrittenCourseFile, getWrittenCourseVideoPresignedUrl, uploadAiProductFile, uploadRecordingFile, getLibraryFiles, deleteLibraryFile } = require("../controllers/fileUploadController");
+const requireStaff = require("../middlewares/requireStaff");
+const { uploadFile, uploadBlogsFile, getAllBlogFiles, deleteBlogFile, uploadResumeFile, getAllResumeFiles, uploadProjectFile,uploadJobApplicationResume,uploadScholarshipApplicationResume, deleteProjectFile, deleteResumeFile, uploadEventFile, deleteEventFile , uploadWrittenCourseFile , deleteWrittenCourseFile, getWrittenCourseVideoPresignedUrl, uploadAiProductFile, uploadRecordingFile, uploadReviewFile, getLibraryFiles, deleteLibraryFile } = require("../controllers/fileUploadController");
 
 router.post("/", upload.single("file"), uploadFile);
 
 router.post("/ai-products", upload.single("file"), uploadAiProductFile);
 
 router.post("/recordings", upload.single("file"), uploadRecordingFile);
+
+// Staff-only, unlike the older upload routes above.
+router.post("/reviews", requireStaff, upload.single("file"), uploadReviewFile);
 router.get("/library", getLibraryFiles);
 router.delete("/library", deleteLibraryFile);
 

@@ -35,6 +35,7 @@ const resourceRoutes = require("./routes/resourceRoutes");
 const recordingRoutes = require("./routes/recordingRoutes");
 const newsletterRoutes = require('./routes/newsletterRoutes');
 const aiProductRoutes = require('./routes/aiProductRoutes');
+const reviewRoutes = require("./routes/reviewRoutes");
 
 
 const programOfferRoutes = require("./routes/programOfferRoutes");
@@ -120,6 +121,7 @@ app.use('/recordings', recordingRoutes);
 app.use("/program-offers", programOfferRoutes);
 app.use('/newsletter', newsletterRoutes);
 app.use('/ai-products', aiProductRoutes);
+app.use("/reviews", reviewRoutes);
 
 app.use("/tokens", userAppTokenRoutes);
 

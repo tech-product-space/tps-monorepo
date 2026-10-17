@@ -79,6 +79,7 @@ app.use(
       "https://api.theproductspace.in",
       "http://localhost:5173",
       "http://localhost:4000",
+      //"http://localhost:3001",
       "https://gradientlearnings.org",
       "https://www.gradientlearnings.org",
       // The student-facing onboarding portal. It also gets its own, stricter
